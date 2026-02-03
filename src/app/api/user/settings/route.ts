@@ -36,6 +36,19 @@ export async function GET() {
       );
     }
 
+    // Get today's token usage
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tokenUsage = await prisma.tokenUsage.findUnique({
+      where: {
+        userId_date: {
+          userId: session.user.id,
+          date: today,
+        },
+      },
+    });
+
     // Merge with defaults to ensure all fields are present
     const settings: UserSettings = {
       ...DEFAULT_USER_SETTINGS,
@@ -44,7 +57,10 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: settings,
+      data: {
+        ...settings,
+        tokenUsage: tokenUsage?.tokensUsed || 0,
+      },
     });
   } catch (error) {
     console.error("Get user settings error:", error);

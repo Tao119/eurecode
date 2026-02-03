@@ -59,6 +59,10 @@ export default function SettingsPage() {
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
+  // Token usage state
+  const [todayTokenUsage, setTodayTokenUsage] = useState(0);
+  const [isLoadingTokenUsage, setIsLoadingTokenUsage] = useState(false);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/settings");
@@ -92,6 +96,28 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchOrgInfo();
   }, [fetchOrgInfo]);
+
+  // Fetch token usage
+  const fetchTokenUsage = useCallback(async () => {
+    if (!session?.user?.id) return;
+
+    setIsLoadingTokenUsage(true);
+    try {
+      const response = await fetch("/api/user/settings");
+      const data = await response.json();
+      if (data.success && data.data.tokenUsage !== undefined) {
+        setTodayTokenUsage(data.data.tokenUsage);
+      }
+    } catch (error) {
+      console.error("Failed to fetch token usage:", error);
+    } finally {
+      setIsLoadingTokenUsage(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchTokenUsage();
+  }, [fetchTokenUsage]);
 
   if (status === "loading") {
     return (
@@ -484,20 +510,31 @@ export default function SettingsPage() {
           <CardDescription>今日のトークン使用状況</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">使用量</span>
-              <span className="font-bold">
-                0 / {session?.user.dailyTokenLimit?.toLocaleString() || "1,000"}
-              </span>
+          {isLoadingTokenUsage ? (
+            <div className="flex items-center justify-center py-4">
+              <LoadingSpinner size="sm" />
             </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: "0%" }} />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">使用量</span>
+                <span className="font-bold">
+                  {todayTokenUsage.toLocaleString()} / {session?.user.dailyTokenLimit?.toLocaleString() || "1,000"}
+                </span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{
+                    width: `${Math.min((todayTokenUsage / (session?.user.dailyTokenLimit || 1000)) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                毎日0時にリセットされます
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              毎日0時にリセットされます
-            </p>
-          </div>
+          )}
         </CardContent>
       </Card>
 

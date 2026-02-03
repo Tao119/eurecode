@@ -240,7 +240,7 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        "group relative flex w-full gap-4 px-4 py-6",
+        "relative flex w-full gap-4 px-4 py-6",
         isUser ? "bg-transparent" : "bg-muted/30"
       )}
     >
@@ -305,13 +305,13 @@ export function ChatMessage({
         )}
       </div>
 
-      {/* Action Buttons - shown on hover */}
+      {/* Action Buttons - always visible, highlight only on button hover */}
       {(showForkButton || showRegenerateButton) && (
-        <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+        <div className="absolute right-4 top-4 flex items-center gap-2">
           {showRegenerateButton && onRegenerate && (
             <button
               onClick={onRegenerate}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card border border-border hover:bg-muted/80 hover:border-primary/50 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground transition-all shadow-sm cursor-pointer"
               title="この回答を再生成"
             >
               <span className="material-symbols-outlined text-base">refresh</span>
@@ -321,7 +321,7 @@ export function ChatMessage({
           {showForkButton && onFork && (
             <button
               onClick={onFork}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card border border-border hover:bg-muted/80 hover:border-primary/50 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground transition-all shadow-sm cursor-pointer"
               title="この時点から会話を分岐"
             >
               <span className="material-symbols-outlined text-base">fork_right</span>
@@ -367,7 +367,7 @@ function OptionButtons({
               "w-full text-left p-3 rounded-lg border transition-all",
               isDisabled
                 ? "border-border/50 bg-muted/30 cursor-not-allowed opacity-60"
-                : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 group"
+                : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 group/option cursor-pointer"
             )}
           >
             <span className="inline-flex items-center gap-3">
@@ -375,7 +375,7 @@ function OptionButtons({
                 "flex-shrink-0 size-7 rounded-full font-bold flex items-center justify-center text-sm transition-colors",
                 isDisabled
                   ? "bg-muted text-muted-foreground"
-                  : "bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                  : "bg-primary/20 text-primary group-hover/option:bg-primary group-hover/option:text-primary-foreground"
               )}>
                 {option.label}
               </span>
