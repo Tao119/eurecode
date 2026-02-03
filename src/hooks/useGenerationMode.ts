@@ -176,6 +176,9 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
   // 初期状態の読み込みが完了するまで保存をブロック
   // conversationId がある場合、初期状態が適用されるまで待機
   const canSaveRef = useRef(!conversationId);
+  // skipAllowed をコールバック内で参照するためのref
+  const skipAllowedRef = useRef(skipAllowed);
+  skipAllowedRef.current = skipAllowed;
 
   // skipAllowed の場合: totalQuestions=0, unlockLevel=0 → 0 >= 0 で即アンロック
   const defaultTotalQuestions = skipAllowed ? 0 : 3;
@@ -504,9 +507,13 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       // 既存の進行状況がある場合は必ずそれを使用（リロード時の状態保持）
       // 新規アーティファクトの場合のみデフォルト値を使用
       if (existingProgress) {
+        // skipAllowed の場合は totalQuestions を 0 に強制
+        const effectiveTotalQuestions = skipAllowedRef.current ? 0 : existingProgress.totalQuestions;
+        const effectiveUnlockLevel = skipAllowedRef.current ? 0 : existingProgress.unlockLevel;
+
         // 既存の進行状況を保持（アンロック状態をリセットしない）
-        const artifactIsUnlocked = existingProgress.totalQuestions === 0 ||
-          existingProgress.unlockLevel >= existingProgress.totalQuestions;
+        const artifactIsUnlocked = effectiveTotalQuestions === 0 ||
+          effectiveUnlockLevel >= effectiveTotalQuestions;
 
         return {
           ...prev,
@@ -515,8 +522,8 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
             [artifact.id]: updatedArtifact,
           },
           activeArtifactId: artifact.id,
-          unlockLevel: existingProgress.unlockLevel,
-          totalQuestions: existingProgress.totalQuestions,
+          unlockLevel: effectiveUnlockLevel,
+          totalQuestions: effectiveTotalQuestions,
           currentQuiz: artifactIsUnlocked ? null : existingProgress.currentQuiz,
           quizHistory: existingProgress.quizHistory,
           generatedCode: {
@@ -591,15 +598,19 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       const progress = prev.artifactProgress[id];
 
       if (progress) {
+        // skipAllowed の場合は totalQuestions を 0 に強制
+        const effectiveTotalQuestions = skipAllowedRef.current ? 0 : progress.totalQuestions;
+        const effectiveUnlockLevel = skipAllowedRef.current ? 0 : progress.unlockLevel;
+
         // 保存済みの進行状況を使用
-        const artifactIsUnlocked = progress.totalQuestions === 0 ||
-          progress.unlockLevel >= progress.totalQuestions;
+        const artifactIsUnlocked = effectiveTotalQuestions === 0 ||
+          effectiveUnlockLevel >= effectiveTotalQuestions;
 
         return {
           ...prev,
           activeArtifactId: id,
-          unlockLevel: progress.unlockLevel,
-          totalQuestions: progress.totalQuestions,
+          unlockLevel: effectiveUnlockLevel,
+          totalQuestions: effectiveTotalQuestions,
           currentQuiz: artifactIsUnlocked ? null : progress.currentQuiz,
           quizHistory: progress.quizHistory,
           phase: artifactIsUnlocked ? "unlocked" : "unlocking",
@@ -612,14 +623,16 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       }
 
       // 進行状況がない場合（新規アーティファクト）
+      // skipAllowed の場合は即アンロック
+      const effectiveTotalQuestions = skipAllowedRef.current ? 0 : prev.totalQuestions;
       return {
         ...prev,
         activeArtifactId: id,
         unlockLevel: 0,
-        totalQuestions: prev.totalQuestions,
+        totalQuestions: effectiveTotalQuestions,
         currentQuiz: null,
         quizHistory: [],
-        phase: prev.totalQuestions === 0 ? "unlocked" : "coding",
+        phase: effectiveTotalQuestions === 0 ? "unlocked" : "coding",
         generatedCode: {
           language: artifact.language || "text",
           code: artifact.content,
