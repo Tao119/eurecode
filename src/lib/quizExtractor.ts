@@ -163,6 +163,8 @@ export function extractMultipleQuizzes(content: string): MultipleExtractedQuizze
     /(?=【(?:質問|問題|問)\s*[1-9０-９][0-9０-９]*】)/g,
     /(?=Q\s*[1-9][0-9]*[\s:：.．])/gi,
     /(?=\n\s*[1-9][0-9]*[\s.．:：]\s*[^\dA-Da-d].*?(?:\n\s*[A-Da-d][\s)）.:：]))/g,
+    // 疑問符で終わる行の後にA)などの選択肢が続くパターン
+    /(?=\n[^\n]*[？?]\s*\n\s*[A-Da-dＡ-Ｄ][)）.:：])/g,
   ];
 
   let sections: string[] = [];
@@ -232,6 +234,20 @@ function splitByOptionSets(content: string): string[] {
   let lastOptionLabel = "";
   let optionCount = 0;
   let seenLabels = new Set<string>();
+  // 最後の選択肢行のインデックス（currentSection内）を追跡
+  let lastOptionIndexInSection = -1;
+
+  // 質問文かどうかを判定するヘルパー関数
+  const isQuestionLikeLine = (line: string): boolean => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    // 質問マーカーや質問文のパターン
+    return /[？?]$/.test(trimmed) || // 疑問符で終わる
+           /^(?:質問|問題|問)\s*[0-9０-９]/.test(trimmed) || // 質問番号
+           /^Q\s*[0-9]/i.test(trimmed) || // Q1, Q2など
+           /^【[^】]+】/.test(trimmed) || // 【】で囲まれた見出し
+           /^[0-9０-９]+[.．:：)）]/.test(trimmed); // 番号付きの行
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -247,16 +263,41 @@ function splitByOptionSets(content: string): string[] {
       // または既に見たラベルが再度出現した場合（重複）
       if ((label === "A" && optionCount >= 2) ||
           (seenLabels.has(label) && optionCount >= 2)) {
-        sections.push(currentSection.join("\n"));
-        currentSection = [];
+        // 新しい質問のテキストが現在のセクションに含まれている可能性を考慮
+        // 最後の選択肢以降の行を新しいセクションに移動
+        let splitIndex = currentSection.length;
+
+        // 最後の選択肢行の後から、質問文らしい行を探す
+        if (lastOptionIndexInSection >= 0 && lastOptionIndexInSection < currentSection.length - 1) {
+          for (let j = lastOptionIndexInSection + 1; j < currentSection.length; j++) {
+            if (isQuestionLikeLine(currentSection[j]) || currentSection[j].trim().length > 10) {
+              // 質問文らしい行、または内容のある行を見つけた
+              splitIndex = j;
+              break;
+            }
+          }
+        }
+
+        // 前のセクションを保存
+        const prevSectionLines = currentSection.slice(0, splitIndex);
+        const nextSectionLines = currentSection.slice(splitIndex);
+
+        if (prevSectionLines.length > 0) {
+          sections.push(prevSectionLines.join("\n"));
+        }
+
+        // 次のセクションに残りの行を移動
+        currentSection = nextSectionLines;
         optionCount = 0;
         seenLabels = new Set<string>();
+        lastOptionIndexInSection = -1;
       }
 
       currentSection.push(line);
       lastOptionLabel = label;
       seenLabels.add(label);
       optionCount++;
+      lastOptionIndexInSection = currentSection.length - 1;
     } else {
       currentSection.push(line);
 
@@ -272,6 +313,7 @@ function splitByOptionSets(content: string): string[] {
           optionCount = 0;
           lastOptionLabel = "";
           seenLabels = new Set<string>();
+          lastOptionIndexInSection = -1;
         }
       }
     }

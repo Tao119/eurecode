@@ -89,7 +89,11 @@ export function InteractiveQuiz({ quiz, onSubmit, disabled = false }: Interactiv
           )}
         >
           <span className="material-symbols-outlined text-xl">send</span>
-          {allAnswered ? "回答を送信" : "すべての質問に回答してください"}
+          {allAnswered
+            ? "回答を送信"
+            : totalCount === 1
+              ? "回答を選択してください"
+              : "すべての質問に回答してください"}
         </button>
       )}
     </div>
