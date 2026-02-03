@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import type { MessageParam, ContentBlockParam, ImageBlockParam, DocumentBlockParam, TextBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -11,12 +12,127 @@ import {
   TOKEN_LIMIT_EXCEEDED_CODE,
 } from "@/lib/token-limit";
 
+// Supported media types for Claude API
+const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+const DOCUMENT_MEDIA_TYPES = ["application/pdf"] as const;
+
+type ImageMediaType = typeof IMAGE_MEDIA_TYPES[number];
+type DocumentMediaType = typeof DOCUMENT_MEDIA_TYPES[number];
+
+function isImageMediaType(type: string): type is ImageMediaType {
+  return IMAGE_MEDIA_TYPES.includes(type as ImageMediaType);
+}
+
+function isDocumentMediaType(type: string): type is DocumentMediaType {
+  return DOCUMENT_MEDIA_TYPES.includes(type as DocumentMediaType);
+}
+
+// Loose attachment type for Zod-parsed data (type is string, not FileMediaType)
+interface LooseFileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data?: string;
+  previewUrl?: string;
+}
+
+// Convert file attachments to Claude API content blocks
+function attachmentsToContentBlocks(attachments: LooseFileAttachment[]): ContentBlockParam[] {
+  const blocks: ContentBlockParam[] = [];
+
+  for (const attachment of attachments) {
+    if (!attachment.data) continue;
+
+    if (isImageMediaType(attachment.type)) {
+      // Image content block
+      const imageBlock: ImageBlockParam = {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: attachment.type as ImageMediaType,
+          data: attachment.data,
+        },
+      };
+      blocks.push(imageBlock);
+    } else if (isDocumentMediaType(attachment.type)) {
+      // Document (PDF) content block
+      const documentBlock: DocumentBlockParam = {
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: attachment.type as DocumentMediaType,
+          data: attachment.data,
+        },
+      };
+      blocks.push(documentBlock);
+    } else {
+      // Text-based files - decode and add as text
+      try {
+        const text = Buffer.from(attachment.data, "base64").toString("utf-8");
+        const textBlock: TextBlockParam = {
+          type: "text",
+          text: `--- ${attachment.name} ---\n${text}\n--- End of ${attachment.name} ---`,
+        };
+        blocks.push(textBlock);
+      } catch {
+        // Skip files that can't be decoded as text
+      }
+    }
+  }
+
+  return blocks;
+}
+
+// Convert messages to Claude API format with attachments support
+function messagesToAnthropicFormat(messages: Array<{ role: "user" | "assistant"; content: string; attachments?: LooseFileAttachment[] }>): MessageParam[] {
+  return messages.map((msg) => {
+    // If message has attachments and is from user, create multimodal content
+    if (msg.role === "user" && msg.attachments && msg.attachments.length > 0) {
+      const contentBlocks: ContentBlockParam[] = [];
+
+      // Add file attachments first
+      const attachmentBlocks = attachmentsToContentBlocks(msg.attachments);
+      contentBlocks.push(...attachmentBlocks);
+
+      // Add text content if present
+      if (msg.content.trim()) {
+        contentBlocks.push({
+          type: "text",
+          text: msg.content,
+        });
+      }
+
+      return {
+        role: msg.role,
+        content: contentBlocks,
+      };
+    }
+
+    // Simple text message
+    return {
+      role: msg.role,
+      content: msg.content,
+    };
+  });
+}
+
+const fileAttachmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  size: z.number(),
+  data: z.string().optional(),
+  previewUrl: z.string().optional(),
+});
+
 const chatRequestSchema = z.object({
   mode: z.enum(["explanation", "generation", "brainstorm"]),
   messages: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
       content: z.string(),
+      attachments: z.array(fileAttachmentSchema).optional(),
     })
   ),
   conversationId: z.string().optional(),
@@ -133,10 +249,7 @@ export async function POST(request: NextRequest) {
             model: "claude-sonnet-4-20250514",
             max_tokens: 4096,
             system: getSystemPrompt(),
-            messages: messages.map((msg) => ({
-              role: msg.role,
-              content: msg.content,
-            })),
+            messages: messagesToAnthropicFormat(messages),
           });
 
           let chunkCount = 0;

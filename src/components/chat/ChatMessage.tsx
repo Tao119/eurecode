@@ -2,7 +2,7 @@
 
 import { useState, createContext, useContext, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import type { Message, InteractiveQuestion, InteractiveQuizForm, ChatMode } from "@/types/chat";
+import type { Message, InteractiveQuestion, InteractiveQuizForm, ChatMode, FileAttachment } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -310,6 +310,11 @@ export function ChatMessage({
             <MessageContent content={displayContent} isUser={isUser} />
           </CodeBlockContext.Provider>
         </div>
+
+        {/* File Attachments Display */}
+        {message.attachments && message.attachments.length > 0 && (
+          <FileAttachmentDisplay attachments={message.attachments} />
+        )}
 
         {/* Selection Popup for saving selected text */}
         {selectionPopup && (
@@ -839,6 +844,63 @@ function CodeBlock({
       <pre className="bg-[#1e1e1e] p-4 overflow-x-auto">
         <code className="text-sm font-mono text-gray-200">{code.code}</code>
       </pre>
+    </div>
+  );
+}
+
+// File Attachment Display Component
+function FileAttachmentDisplay({ attachments }: { attachments: FileAttachment[] }) {
+  const isImageType = (type: string) => type.startsWith("image/");
+  const isPdfType = (type: string) => type === "application/pdf";
+  const isTextType = (type: string) =>
+    type.startsWith("text/") || type === "application/json" || type === "application/xml";
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (type: string) => {
+    if (isImageType(type)) return "image";
+    if (isPdfType(type)) return "picture_as_pdf";
+    if (isTextType(type)) return "description";
+    return "attach_file";
+  };
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {attachments.map((attachment) => (
+        <div
+          key={attachment.id}
+          className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/30 max-w-xs"
+        >
+          {isImageType(attachment.type) && attachment.previewUrl ? (
+            <img
+              src={attachment.previewUrl}
+              alt={attachment.name}
+              className="w-16 h-16 object-cover rounded"
+            />
+          ) : (
+            <div className="w-10 h-10 flex items-center justify-center rounded bg-muted">
+              <span className={cn(
+                "material-symbols-outlined text-xl",
+                isPdfType(attachment.type) ? "text-red-400" : "text-blue-400"
+              )}>
+                {getFileIcon(attachment.type)}
+              </span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" title={attachment.name}>
+              {attachment.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatFileSize(attachment.size)}
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

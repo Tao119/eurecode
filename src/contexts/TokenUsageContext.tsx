@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
 interface TokenUsageContextValue {
@@ -14,9 +14,10 @@ interface TokenUsageContextValue {
 const TokenUsageContext = createContext<TokenUsageContextValue | null>(null);
 
 export function TokenUsageProvider({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [todayUsage, setTodayUsage] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const hasFetchedRef = useRef(false);
 
   const dailyLimit = session?.user?.dailyTokenLimit || 1000;
 
@@ -42,10 +43,18 @@ export function TokenUsageProvider({ children }: { children: React.ReactNode }) 
     setTodayUsage((prev) => prev + tokens);
   }, []);
 
-  // Initial fetch
+  // Initial fetch when session becomes authenticated
   useEffect(() => {
-    refreshUsage();
-  }, [refreshUsage]);
+    if (status === "authenticated" && session?.user?.id && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      refreshUsage();
+    }
+    // Reset when user logs out
+    if (status === "unauthenticated") {
+      hasFetchedRef.current = false;
+      setTodayUsage(0);
+    }
+  }, [status, session?.user?.id, refreshUsage]);
 
   return (
     <TokenUsageContext.Provider

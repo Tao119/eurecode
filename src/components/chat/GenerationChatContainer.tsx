@@ -23,7 +23,7 @@ import {
 } from "@/hooks/useGenerationMode";
 import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
-import type { Message, ConversationBranch, Artifact } from "@/types/chat";
+import type { Message, ConversationBranch, Artifact, FileAttachment } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { parseArtifacts } from "@/lib/artifacts";
 import {
@@ -37,7 +37,7 @@ import {
 interface GenerationChatContainerProps {
   messages: Message[];
   isLoading: boolean;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, attachments?: FileAttachment[]) => void;
   onSendMessageWithContext?: (message: string, context: Record<string, unknown>) => void;
   welcomeMessage?: string;
   inputPlaceholder?: string;

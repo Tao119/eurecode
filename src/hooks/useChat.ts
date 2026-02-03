@@ -9,6 +9,7 @@ import type {
   ConversationMetadata,
   BrainstormModeState,
   BrainstormSubMode,
+  FileAttachment,
 } from "@/types/chat";
 import type { ApiError } from "@/types/api";
 import { isAuthError, handleAuthError } from "@/lib/auth-error-handler";
@@ -54,7 +55,7 @@ interface UseChatReturn {
   isLoadingHistory: boolean;
   error: Error | null;
   conversationId: string | null;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: FileAttachment[]) => Promise<void>;
   clearMessages: () => void;
   loadConversation: (id: string) => Promise<void>;
   // Stop functionality
@@ -402,8 +403,8 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
   }, [messages.length]);
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim() || isLoading) return;
+    async (content: string, attachments?: FileAttachment[]) => {
+      if ((!content.trim() && (!attachments || attachments.length === 0)) || isLoading) return;
 
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
@@ -414,6 +415,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         role: "user",
         content,
         timestamp: new Date().toISOString(),
+        attachments,
       };
 
       setMessages((prev) => [...prev, userMessage]);

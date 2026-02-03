@@ -14,7 +14,7 @@ import {
   PHASE_INFO,
 } from "@/hooks/useBrainstormMode";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
-import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata } from "@/types/chat";
+import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata, FileAttachment } from "@/types/chat";
 import { BRAINSTORM_SUB_MODES } from "@/types/chat";
 import { BRAINSTORM_INITIAL_MESSAGES } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 interface BrainstormChatContainerProps {
   messages: Message[];
   isLoading: boolean;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, attachments?: FileAttachment[]) => void;
   welcomeMessage?: string;
   inputPlaceholder?: string;
   onStopGeneration?: () => void;

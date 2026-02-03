@@ -5,14 +5,14 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
-import type { Message, ChatMode, ConversationBranch } from "@/types/chat";
+import type { Message, ChatMode, ConversationBranch, FileAttachment } from "@/types/chat";
 import { cn } from "@/lib/utils";
 
 interface ChatContainerProps {
   mode: ChatMode;
   messages: Message[];
   isLoading: boolean;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, attachments?: FileAttachment[]) => void;
   welcomeMessage?: string;
   inputPlaceholder?: string;
   // Stop & Fork functionality
