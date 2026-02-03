@@ -110,6 +110,9 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
   const pendingSaveRef = useRef<boolean>(false);
   const isMountedRef = useRef<boolean>(true);
   const saveAbortControllerRef = useRef<AbortController | null>(null);
+  // タイトル生成の試行回数（最初のAI応答後と、メッセージが増えた後に再生成）
+  const titleGenerationAttemptRef = useRef<number>(0);
+  const lastTitleGenerationMessageCountRef = useRef<number>(0);
 
   // Keep metadata ref in sync
   useEffect(() => {
@@ -234,6 +237,60 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
       }
     }
   }, [mode, projectId, buildMetadata, onConversationCreated]);
+
+  // タイトル自動生成（AIによる要約）
+  const generateTitle = useCallback(async (convId: string, messageCount: number) => {
+    // タイトル生成の条件:
+    // 1. 最初のAI応答後（メッセージ2件以上）
+    // 2. メッセージが5件増えるごとに再生成を検討
+    const shouldGenerate =
+      titleGenerationAttemptRef.current === 0 ||
+      messageCount - lastTitleGenerationMessageCountRef.current >= 5;
+
+    if (!shouldGenerate || !isMountedRef.current) return;
+
+    titleGenerationAttemptRef.current++;
+    lastTitleGenerationMessageCountRef.current = messageCount;
+
+    try {
+      const response = await fetch(`/api/conversations/${convId}/generate-title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        console.warn("Title generation failed:", response.status);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && data.data?.updated) {
+        console.log("[useChat] Title updated:", data.data.title);
+      }
+    } catch (err) {
+      // タイトル生成の失敗は致命的ではないのでログのみ
+      console.warn("Failed to generate title:", err);
+    }
+  }, []);
+
+  // 新規会話作成後のタイトル生成
+  useEffect(() => {
+    // 会話IDが新しく設定され、メッセージが2件以上あり、ストリーミング中でない場合
+    if (
+      conversationId &&
+      messages.length >= 2 &&
+      !isStreamingRef.current &&
+      titleGenerationAttemptRef.current === 0
+    ) {
+      // 少し遅延させて保存完了を待つ
+      const timer = setTimeout(() => {
+        if (isMountedRef.current && conversationId) {
+          generateTitle(conversationId, messages.length);
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [conversationId, messages.length, generateTitle]);
 
   // Debounced save effect - skip during streaming to prevent excessive saves
   useEffect(() => {
@@ -605,9 +662,21 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
           const currentMessages = currentState.messagesByBranch[currentState.currentBranchId] || [];
           saveConversation(currentMessages, conversationId);
         }
+
+        // タイトル自動生成（会話IDがある場合）
+        const currentState = branchStateRef.current;
+        const currentMessages = currentState.messagesByBranch[currentState.currentBranchId] || [];
+        if (conversationId && currentMessages.length >= 2) {
+          // 少し遅延させて保存完了を待つ
+          setTimeout(() => {
+            if (isMountedRef.current && conversationId) {
+              generateTitle(conversationId, currentMessages.length);
+            }
+          }, 1500);
+        }
       }
     },
-    [mode, isLoading, onError, onTokensUsed, setMessages, conversationId, saveConversation, brainstormSubMode]
+    [mode, isLoading, onError, onTokensUsed, setMessages, conversationId, saveConversation, brainstormSubMode, generateTitle]
   );
 
   const clearMessages = useCallback(() => {
