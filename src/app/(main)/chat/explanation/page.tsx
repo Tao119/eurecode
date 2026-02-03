@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ChatContainer } from "@/components/chat";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
-import { useChat } from "@/hooks/useChat";
+import { useChat, ChatApiError } from "@/hooks/useChat";
 import { useTokenUsageOptional } from "@/contexts/TokenUsageContext";
+import { useTokenLimitDialog } from "@/components/common/TokenLimitDialog";
 import { toast } from "sonner";
 
 export default function ExplanationModePage() {
@@ -14,6 +15,7 @@ export default function ExplanationModePage() {
   const conversationId = searchParams.get("id");
   const initialProjectId = searchParams.get("projectId");
   const tokenUsage = useTokenUsageOptional();
+  const { showTokenLimitError, TokenLimitDialog } = useTokenLimitDialog();
 
   // Project selection state (can be changed before first message)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
@@ -27,6 +29,24 @@ export default function ExplanationModePage() {
   const handleTokensUsed = useCallback((tokens: number) => {
     tokenUsage?.addUsage(tokens);
   }, [tokenUsage]);
+
+  // Handle errors including token limit exceeded
+  const handleError = useCallback((error: Error) => {
+    if (error instanceof ChatApiError && error.code === "TOKEN_LIMIT_EXCEEDED") {
+      const handled = showTokenLimitError({
+        code: error.code,
+        message: error.message,
+        details: error.details as {
+          currentUsage: number;
+          dailyLimit: number;
+          remaining: number;
+          required: number;
+        },
+      });
+      if (handled) return;
+    }
+    toast.error(error.message);
+  }, [showTokenLimitError]);
 
   const {
     messages,
@@ -46,9 +66,7 @@ export default function ExplanationModePage() {
     mode: "explanation",
     conversationId: conversationId || undefined,
     projectId: selectedProjectId || undefined,
-    onError: (error) => {
-      toast.error(error.message);
-    },
+    onError: handleError,
     onConversationCreated: handleConversationCreated,
     onTokensUsed: handleTokensUsed,
   });
@@ -87,28 +105,31 @@ export default function ExplanationModePage() {
   }, [generationRecovery, clearGenerationRecovery]);
 
   return (
-    <ChatContainer
-      mode="explanation"
-      messages={messages}
-      isLoading={isLoading}
-      onSendMessage={sendMessage}
-      welcomeMessage="コードや技術的な概念について質問してください。わかりやすく解説します。"
-      inputPlaceholder="コードを貼り付けるか、質問を入力してください..."
-      onStopGeneration={stopGeneration}
-      onForkFromMessage={forkFromMessage}
-      branches={branches}
-      currentBranchId={currentBranchId}
-      onSwitchBranch={switchBranch}
-      onRegenerate={regenerateLastMessage}
-      canRegenerate={canRegenerate}
-      headerExtra={
-        <ProjectSelector
-          selectedProjectId={selectedProjectId}
-          onProjectChange={setSelectedProjectId}
-          disabled={!canChangeProject}
-        />
-      }
-      conversationId={conversationId || undefined}
-    />
+    <>
+      <ChatContainer
+        mode="explanation"
+        messages={messages}
+        isLoading={isLoading}
+        onSendMessage={sendMessage}
+        welcomeMessage="コードや技術的な概念について質問してください。わかりやすく解説します。"
+        inputPlaceholder="コードを貼り付けるか、質問を入力してください..."
+        onStopGeneration={stopGeneration}
+        onForkFromMessage={forkFromMessage}
+        branches={branches}
+        currentBranchId={currentBranchId}
+        onSwitchBranch={switchBranch}
+        onRegenerate={regenerateLastMessage}
+        canRegenerate={canRegenerate}
+        headerExtra={
+          <ProjectSelector
+            selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
+            disabled={!canChangeProject}
+          />
+        }
+        conversationId={conversationId || undefined}
+      />
+      <TokenLimitDialog />
+    </>
   );
 }

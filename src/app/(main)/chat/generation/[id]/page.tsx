@@ -2,8 +2,9 @@
 
 import { useEffect, use, useCallback, useMemo } from "react";
 import { GenerationChatContainer } from "@/components/chat";
-import { useChat } from "@/hooks/useChat";
+import { useChat, ChatApiError } from "@/hooks/useChat";
 import { useTokenUsageOptional } from "@/contexts/TokenUsageContext";
+import { useTokenLimitDialog } from "@/components/common/TokenLimitDialog";
 import { toast } from "sonner";
 import type { PersistedGenerationState } from "@/hooks/useGenerationMode";
 
@@ -20,11 +21,30 @@ interface ExtendedConversationMetadata {
 export default function GenerationRoomPage({ params }: PageProps) {
   const { id: conversationId } = use(params);
   const tokenUsage = useTokenUsageOptional();
+  const { showTokenLimitError, TokenLimitDialog } = useTokenLimitDialog();
 
   // Update token usage when response completes
   const handleTokensUsed = useCallback((tokens: number) => {
     tokenUsage?.addUsage(tokens);
   }, [tokenUsage]);
+
+  // Handle errors including token limit exceeded
+  const handleError = useCallback((error: Error) => {
+    if (error instanceof ChatApiError && error.code === "TOKEN_LIMIT_EXCEEDED") {
+      const handled = showTokenLimitError({
+        code: error.code,
+        message: error.message,
+        details: error.details as {
+          currentUsage: number;
+          dailyLimit: number;
+          remaining: number;
+          required: number;
+        },
+      });
+      if (handled) return;
+    }
+    toast.error(error.message);
+  }, [showTokenLimitError]);
 
   const {
     messages,
@@ -44,9 +64,7 @@ export default function GenerationRoomPage({ params }: PageProps) {
   } = useChat({
     mode: "generation",
     conversationId,
-    onError: (error) => {
-      toast.error(error.message);
-    },
+    onError: handleError,
     onTokensUsed: handleTokensUsed,
   });
 
@@ -86,22 +104,25 @@ export default function GenerationRoomPage({ params }: PageProps) {
   }, [restoredMetadata]);
 
   return (
-    <GenerationChatContainer
-      messages={messages}
-      isLoading={isLoading}
-      onSendMessage={sendMessage}
-      welcomeMessage="実装したい機能を言葉で説明してください。計画を立て、コードを生成し、理解度を確認しながら進めます。"
-      inputPlaceholder="実装したい機能を説明してください..."
-      canSkip={false}
-      onStopGeneration={stopGeneration}
-      onForkFromMessage={forkFromMessage}
-      branches={branches}
-      currentBranchId={currentBranchId}
-      onSwitchBranch={switchBranch}
-      onRegenerate={regenerateLastMessage}
-      canRegenerate={canRegenerate}
-      conversationId={conversationId}
-      initialGenerationState={initialGenerationState}
-    />
+    <>
+      <GenerationChatContainer
+        messages={messages}
+        isLoading={isLoading}
+        onSendMessage={sendMessage}
+        welcomeMessage="実装したい機能を言葉で説明してください。計画を立て、コードを生成し、理解度を確認しながら進めます。"
+        inputPlaceholder="実装したい機能を説明してください..."
+        canSkip={false}
+        onStopGeneration={stopGeneration}
+        onForkFromMessage={forkFromMessage}
+        branches={branches}
+        currentBranchId={currentBranchId}
+        onSwitchBranch={switchBranch}
+        onRegenerate={regenerateLastMessage}
+        canRegenerate={canRegenerate}
+        conversationId={conversationId}
+        initialGenerationState={initialGenerationState}
+      />
+      <TokenLimitDialog />
+    </>
   );
 }

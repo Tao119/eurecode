@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { BrainstormChatContainer } from "@/components/chat/BrainstormChatContainer";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
-import { useChat } from "@/hooks/useChat";
+import { useChat, ChatApiError } from "@/hooks/useChat";
 import { useTokenUsageOptional } from "@/contexts/TokenUsageContext";
+import { useTokenLimitDialog } from "@/components/common/TokenLimitDialog";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
 
@@ -15,6 +16,7 @@ export default function BrainstormModePage() {
   const conversationId = searchParams.get("id");
   const initialProjectId = searchParams.get("projectId");
   const tokenUsage = useTokenUsageOptional();
+  const { showTokenLimitError, TokenLimitDialog } = useTokenLimitDialog();
 
   // Project selection state (can be changed before first message)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
@@ -30,6 +32,24 @@ export default function BrainstormModePage() {
   const handleTokensUsed = useCallback((tokens: number) => {
     tokenUsage?.addUsage(tokens);
   }, [tokenUsage]);
+
+  // Handle errors including token limit exceeded
+  const handleError = useCallback((error: Error) => {
+    if (error instanceof ChatApiError && error.code === "TOKEN_LIMIT_EXCEEDED") {
+      const handled = showTokenLimitError({
+        code: error.code,
+        message: error.message,
+        details: error.details as {
+          currentUsage: number;
+          dailyLimit: number;
+          remaining: number;
+          required: number;
+        },
+      });
+      if (handled) return;
+    }
+    toast.error(error.message);
+  }, [showTokenLimitError]);
 
   const {
     messages,
@@ -52,9 +72,7 @@ export default function BrainstormModePage() {
     conversationId: conversationId || undefined,
     projectId: selectedProjectId || undefined,
     brainstormSubMode: subMode,
-    onError: (error) => {
-      toast.error(error.message);
-    },
+    onError: handleError,
     onConversationCreated: handleConversationCreated,
     onTokensUsed: handleTokensUsed,
   });
@@ -101,30 +119,33 @@ export default function BrainstormModePage() {
   }, [generationRecovery, clearGenerationRecovery]);
 
   return (
-    <BrainstormChatContainer
-      messages={messages}
-      isLoading={isLoading}
-      onSendMessage={sendMessage}
-      welcomeMessage="アイデアや企画を一緒に整理して、実現可能な形にしていきましょう。"
-      inputPlaceholder="アイデアを一言で教えてください..."
-      onStopGeneration={stopGeneration}
-      onForkFromMessage={forkFromMessage}
-      branches={branches}
-      currentBranchId={currentBranchId}
-      onSwitchBranch={switchBranch}
-      onRegenerate={regenerateLastMessage}
-      canRegenerate={canRegenerate}
-      conversationId={conversationId || undefined}
-      restoredMetadata={restoredMetadata}
-      onMetadataChange={handleMetadataChange}
-      onSubModeChange={setSubMode}
-      headerExtra={
-        <ProjectSelector
-          selectedProjectId={selectedProjectId}
-          onProjectChange={setSelectedProjectId}
-          disabled={!canChangeProject}
-        />
-      }
-    />
+    <>
+      <BrainstormChatContainer
+        messages={messages}
+        isLoading={isLoading}
+        onSendMessage={sendMessage}
+        welcomeMessage="アイデアや企画を一緒に整理して、実現可能な形にしていきましょう。"
+        inputPlaceholder="アイデアを一言で教えてください..."
+        onStopGeneration={stopGeneration}
+        onForkFromMessage={forkFromMessage}
+        branches={branches}
+        currentBranchId={currentBranchId}
+        onSwitchBranch={switchBranch}
+        onRegenerate={regenerateLastMessage}
+        canRegenerate={canRegenerate}
+        conversationId={conversationId || undefined}
+        restoredMetadata={restoredMetadata}
+        onMetadataChange={handleMetadataChange}
+        onSubModeChange={setSubMode}
+        headerExtra={
+          <ProjectSelector
+            selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
+            disabled={!canChangeProject}
+          />
+        }
+      />
+      <TokenLimitDialog />
+    </>
   );
 }

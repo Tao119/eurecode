@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { systemPrompts, brainstormSubModePrompts } from "@/lib/prompts";
 import type { BrainstormSubMode } from "@/types/chat";
+import {
+  checkTokenLimit,
+  estimateTokens,
+  TOKEN_LIMIT_EXCEEDED_CODE,
+} from "@/lib/token-limit";
 
 const chatRequestSchema = z.object({
   mode: z.enum(["explanation", "generation", "brainstorm"]),
@@ -67,6 +72,34 @@ export async function POST(request: NextRequest) {
           error: { code: "CONFIG_ERROR", message: "AI service is not configured" },
         }),
         { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Estimate tokens for this request
+    const inputTokens = estimateTokens(
+      messages.reduce((sum, m) => sum + m.content, "")
+    );
+    // Add estimated output tokens (assume similar to input for now)
+    const estimatedTotalTokens = inputTokens * 2;
+
+    // Check token limit before making API call
+    const tokenCheck = await checkTokenLimit(userId, estimatedTotalTokens);
+    if (!tokenCheck.allowed) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: TOKEN_LIMIT_EXCEEDED_CODE,
+            message: "本日のトークン上限に達しました",
+            details: {
+              currentUsage: tokenCheck.currentUsage,
+              dailyLimit: tokenCheck.dailyLimit,
+              remaining: tokenCheck.remaining,
+              required: estimatedTotalTokens,
+            },
+          },
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } }
       );
     }
 
