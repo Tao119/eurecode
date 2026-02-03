@@ -679,6 +679,7 @@ export function GenerationChatContainer({
                   language={activeArtifact.language || "text"}
                   filename={activeArtifact.title}
                   unlockLevel={state.unlockLevel}
+                  totalQuestions={state.totalQuestions}
                   progressPercentage={progressPercentage}
                   canCopy={canCopyCode}
                 />

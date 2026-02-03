@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatContainer } from "@/components/chat";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
 import { useChat, ChatApiError } from "@/hooks/useChat";
@@ -11,19 +11,27 @@ import { toast } from "sonner";
 
 export default function ExplanationModePage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const conversationId = searchParams.get("id");
+  const initialConversationId = searchParams.get("id");
   const initialProjectId = searchParams.get("projectId");
   const tokenUsage = useTokenUsageOptional();
   const { showTokenLimitError, TokenLimitDialog } = useTokenLimitDialog();
 
+  // Track conversation ID in state to avoid page navigation
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(initialConversationId);
+  const hasUpdatedUrlRef = useRef(false);
+
   // Project selection state (can be changed before first message)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
 
-  // Navigate to the room route when a new conversation is created
+  // Update URL without navigation when a new conversation is created
   const handleConversationCreated = useCallback((id: string) => {
-    router.replace(`/chat/explanation/${id}`);
-  }, [router]);
+    setCurrentConversationId(id);
+    // Update URL for bookmarking/sharing without triggering navigation
+    if (typeof window !== "undefined" && !hasUpdatedUrlRef.current) {
+      hasUpdatedUrlRef.current = true;
+      window.history.replaceState(null, "", `/chat/explanation/${id}`);
+    }
+  }, []);
 
   // Update token usage when response completes
   const handleTokensUsed = useCallback((tokens: number) => {
@@ -64,7 +72,7 @@ export default function ExplanationModePage() {
     clearGenerationRecovery,
   } = useChat({
     mode: "explanation",
-    conversationId: conversationId || undefined,
+    conversationId: currentConversationId || undefined,
     projectId: selectedProjectId || undefined,
     onError: handleError,
     onConversationCreated: handleConversationCreated,
@@ -72,14 +80,14 @@ export default function ExplanationModePage() {
   });
 
   // Disable project change once conversation has started
-  const canChangeProject = messages.length === 0 && !conversationId;
+  const canChangeProject = messages.length === 0 && !currentConversationId;
 
-  // Load conversation from history if ID is provided (legacy query param support)
+  // Load conversation from history if ID is provided (from URL on initial load)
   useEffect(() => {
-    if (conversationId) {
-      loadConversation(conversationId);
+    if (initialConversationId) {
+      loadConversation(initialConversationId);
     }
-  }, [conversationId, loadConversation]);
+  }, [initialConversationId, loadConversation]);
 
   // Show toast for generation recovery
   useEffect(() => {
@@ -127,7 +135,7 @@ export default function ExplanationModePage() {
             disabled={!canChangeProject}
           />
         }
-        conversationId={conversationId || undefined}
+        conversationId={currentConversationId || undefined}
       />
       <TokenLimitDialog />
     </>

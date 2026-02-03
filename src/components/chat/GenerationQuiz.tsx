@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { UnlockLevel, UnlockQuiz } from "@/hooks/useGenerationMode";
-import { LEVEL_LABELS } from "@/hooks/useGenerationMode";
+import type { UnlockQuiz } from "@/hooks/useGenerationMode";
+import { getLevelLabel } from "@/hooks/useGenerationMode";
 
 interface GenerationQuizProps {
   quiz: UnlockQuiz;
@@ -65,7 +65,7 @@ export function GenerationQuiz({
     }
   };
 
-  const levelInfo = LEVEL_LABELS[quiz.level];
+  const levelInfo = getLevelLabel(quiz.level, quiz.totalQuestions ?? 3);
 
   return (
     <div className="rounded-xl border border-yellow-500/30 bg-gradient-to-b from-yellow-500/5 to-orange-500/5 overflow-hidden">

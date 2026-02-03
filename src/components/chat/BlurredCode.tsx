@@ -6,13 +6,14 @@ import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { UnlockLevel } from "@/hooks/useGenerationMode";
-import { LEVEL_LABELS } from "@/hooks/useGenerationMode";
+import { getLevelLabel } from "@/hooks/useGenerationMode";
 
 interface BlurredCodeProps {
   code: string;
   language: string;
   filename?: string;
   unlockLevel: UnlockLevel;
+  totalQuestions: number; // 0 の場合は即アンロック
   progressPercentage: number;
   canCopy?: boolean;
 }
@@ -38,13 +39,13 @@ function analyzeCode(code: string): AnalyzedLine[] {
     const isSignature =
       /^(export|import|function|class|const\s+\w+\s*=|let\s+\w+\s*=|interface|type\s+\w+\s*=)/.test(trimmed) ||
       /^(async\s+function|export\s+(default\s+)?(function|class|const|async))/.test(trimmed) ||
-      /^\}?\s*$/.test(trimmed) && index === lines.length - 1; // 最終行の閉じ括弧
+      /^\}?\s*$/.test(trimmed) && index === lines.length - 1;
 
     // 構造（重要）: 条件分岐、ループ、return、try-catch
     const isStructure =
       /^(if|else|for|while|switch|case|try|catch|finally|return|throw|break|continue)[\s({]/.test(trimmed) ||
       /^(}\s*(else|catch|finally))/.test(trimmed) ||
-      /^\}/.test(trimmed); // 閉じ括弧
+      /^\}/.test(trimmed);
 
     // ロジック（中程度）: 関数呼び出し、代入
     const isLogic =
@@ -52,7 +53,6 @@ function analyzeCode(code: string): AnalyzedLine[] {
       /\w+\s*\(.*\)/.test(trimmed) ||
       /await\s+/.test(trimmed);
 
-    // それ以外は詳細
     let importance: LineImportance = "detail";
     if (isSignature) importance = "signature";
     else if (isStructure) importance = "structure";
@@ -67,30 +67,31 @@ function analyzeCode(code: string): AnalyzedLine[] {
   });
 }
 
-// レベルに応じて表示する行を決定
-function getVisibleLines(analyzedLines: AnalyzedLine[], level: UnlockLevel): number[] {
+// レベルに応じて表示する行を決定（0-based level, totalQuestions=0 で全表示）
+function getVisibleLines(analyzedLines: AnalyzedLine[], level: number, totalQuestions: number): number[] {
+  // totalQuestions=0 または level >= totalQuestions の場合は全て表示
+  if (totalQuestions === 0 || level >= totalQuestions) {
+    return analyzedLines.map((_, index) => index);
+  }
+
   const visibleIndices: number[] = [];
+  const progress = level / totalQuestions;
 
   analyzedLines.forEach((line, index) => {
     let shouldShow = false;
 
-    switch (level) {
-      case 1:
-        // シグネチャのみ + 空行
-        shouldShow = line.importance === "signature" || line.content.trim() === "";
-        break;
-      case 2:
-        // + 構造
-        shouldShow = ["signature", "structure"].includes(line.importance) || line.content.trim() === "";
-        break;
-      case 3:
-        // + ロジック
-        shouldShow = ["signature", "structure", "logic"].includes(line.importance) || line.content.trim() === "";
-        break;
-      case 4:
-        // 全て表示
-        shouldShow = true;
-        break;
+    if (progress === 0) {
+      // まだ何も解除していない: シグネチャのみ + 空行
+      shouldShow = line.importance === "signature" || line.content.trim() === "";
+    } else if (progress < 0.34) {
+      // 約1/3: シグネチャ + 構造
+      shouldShow = ["signature", "structure"].includes(line.importance) || line.content.trim() === "";
+    } else if (progress < 0.67) {
+      // 約2/3: シグネチャ + 構造 + ロジック
+      shouldShow = ["signature", "structure", "logic"].includes(line.importance) || line.content.trim() === "";
+    } else {
+      // それ以上: 全て表示
+      shouldShow = true;
     }
 
     if (shouldShow) {
@@ -101,19 +102,24 @@ function getVisibleLines(analyzedLines: AnalyzedLine[], level: UnlockLevel): num
   return visibleIndices;
 }
 
-// レベルごとの説明
-const LEVEL_DESCRIPTIONS: Record<UnlockLevel, string> = {
-  1: "関数の構造を把握",
-  2: "制御フローを理解",
-  3: "処理の流れを追う",
-  4: "完全に理解",
-};
+// レベルごとの説明（動的に生成）
+function getLevelDescription(level: number, totalQuestions: number): string {
+  if (totalQuestions === 0 || level >= totalQuestions) {
+    return "完全に理解";
+  }
+  const progress = level / totalQuestions;
+  if (progress === 0) return "関数の構造を把握";
+  if (progress < 0.34) return "制御フローを理解";
+  if (progress < 0.67) return "処理の流れを追う";
+  return "ほぼ完了";
+}
 
 export function BlurredCode({
   code,
   language,
   filename,
   unlockLevel,
+  totalQuestions,
   progressPercentage,
   canCopy = false,
 }: BlurredCodeProps) {
@@ -144,14 +150,13 @@ export function BlurredCode({
 
   // 表示する行のインデックス
   const visibleIndices = useMemo(
-    () => getVisibleLines(analyzedLines, unlockLevel),
-    [analyzedLines, unlockLevel]
+    () => getVisibleLines(analyzedLines, unlockLevel, totalQuestions),
+    [analyzedLines, unlockLevel, totalQuestions]
   );
 
-  const isLocked = unlockLevel < 4;
-  const levelInfo = LEVEL_LABELS[unlockLevel];
+  const isLocked = totalQuestions > 0 && unlockLevel < totalQuestions;
+  const levelInfo = getLevelLabel(unlockLevel, totalQuestions);
   const visibleLineCount = visibleIndices.length;
-  const hiddenLineCount = totalLines - visibleLineCount;
 
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-[#1e1e1e]">
@@ -168,7 +173,7 @@ export function BlurredCode({
           {isLocked && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-medium">
               <span className="material-symbols-outlined text-sm">visibility</span>
-              {LEVEL_DESCRIPTIONS[unlockLevel]}
+              {getLevelDescription(unlockLevel, totalQuestions)}
             </span>
           )}
         </div>
@@ -193,51 +198,47 @@ export function BlurredCode({
         </Button>
       </div>
 
-      {/* 進捗バー */}
-      <div className="px-4 py-2 bg-[#252526] border-b border-border">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-foreground/80">
-              {levelInfo.title}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {visibleLineCount}/{totalLines} 行表示中
-            </span>
-          </div>
-          <span className="text-xs font-medium text-yellow-400">
-            {Math.round(progressPercentage)}%
-          </span>
-        </div>
-        <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-
-        {/* レベルインジケーター */}
-        <div className="flex justify-between mt-2">
-          {([1, 2, 3, 4] as UnlockLevel[]).map((level) => (
-            <div
-              key={level}
-              className={cn(
-                "flex flex-col items-center text-xs",
-                level <= unlockLevel ? "text-yellow-400" : "text-muted-foreground/50"
-              )}
-            >
-              <span className="material-symbols-outlined text-sm">
-                {level <= unlockLevel ? "check_circle" : "radio_button_unchecked"}
+      {/* 進捗バー（totalQuestions > 0 の場合のみ表示） */}
+      {totalQuestions > 0 && (
+        <div className="px-4 py-2 bg-[#252526] border-b border-border">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-foreground/80">
+                {levelInfo.title}
               </span>
-              <span className="text-[10px] mt-0.5 hidden sm:block">
-                {level === 1 && "構造"}
-                {level === 2 && "フロー"}
-                {level === 3 && "ロジック"}
-                {level === 4 && "全て"}
+              <span className="text-xs text-muted-foreground">
+                {visibleLineCount}/{totalLines} 行表示中
               </span>
             </div>
-          ))}
+            <span className="text-xs font-medium text-yellow-400">
+              {Math.round(progressPercentage)}%
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+
+          {/* レベルインジケーター */}
+          <div className="flex justify-between mt-2">
+            {Array.from({ length: totalQuestions }, (_, i) => i + 1).map((level) => (
+              <div
+                key={level}
+                className={cn(
+                  "flex flex-col items-center text-xs",
+                  level <= unlockLevel ? "text-yellow-400" : "text-muted-foreground/50"
+                )}
+              >
+                <span className="material-symbols-outlined text-sm">
+                  {level <= unlockLevel ? "check_circle" : "radio_button_unchecked"}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* コード表示エリア */}
       <div className="relative font-mono text-sm">
@@ -299,7 +300,6 @@ export function BlurredCode({
             );
           })}
         </div>
-
       </div>
 
       {/* フッター（アンロック完了時） */}

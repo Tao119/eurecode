@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { BrainstormChatContainer } from "@/components/chat/BrainstormChatContainer";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
 import { useChat, ChatApiError } from "@/hooks/useChat";
@@ -12,21 +12,29 @@ import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
 
 export default function BrainstormModePage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const conversationId = searchParams.get("id");
+  const initialConversationId = searchParams.get("id");
   const initialProjectId = searchParams.get("projectId");
   const tokenUsage = useTokenUsageOptional();
   const { showTokenLimitError, TokenLimitDialog } = useTokenLimitDialog();
+
+  // Track conversation ID in state to avoid page navigation
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(initialConversationId);
+  const hasUpdatedUrlRef = useRef(false);
 
   // Project selection state (can be changed before first message)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
   // SubMode state for API calls (synced from BrainstormChatContainer)
   const [subMode, setSubMode] = useState<BrainstormSubMode>("casual");
 
-  // Navigate to the room route when a new conversation is created
+  // Update URL without navigation when a new conversation is created
   const handleConversationCreated = useCallback((id: string) => {
-    router.replace(`/chat/brainstorm/${id}`);
-  }, [router]);
+    setCurrentConversationId(id);
+    // Update URL for bookmarking/sharing without triggering navigation
+    if (typeof window !== "undefined" && !hasUpdatedUrlRef.current) {
+      hasUpdatedUrlRef.current = true;
+      window.history.replaceState(null, "", `/chat/brainstorm/${id}`);
+    }
+  }, []);
 
   // Update token usage when response completes
   const handleTokensUsed = useCallback((tokens: number) => {
@@ -69,7 +77,7 @@ export default function BrainstormModePage() {
     setExternalMetadata,
   } = useChat({
     mode: "brainstorm",
-    conversationId: conversationId || undefined,
+    conversationId: currentConversationId || undefined,
     projectId: selectedProjectId || undefined,
     brainstormSubMode: subMode,
     onError: handleError,
@@ -78,7 +86,7 @@ export default function BrainstormModePage() {
   });
 
   // Disable project change once conversation has started
-  const canChangeProject = messages.length === 0 && !conversationId;
+  const canChangeProject = messages.length === 0 && !currentConversationId;
 
   // Handle metadata changes from BrainstormChatContainer
   const handleMetadataChange = useCallback(
@@ -88,12 +96,12 @@ export default function BrainstormModePage() {
     [setExternalMetadata]
   );
 
-  // Load conversation from history if ID is provided (legacy query param support)
+  // Load conversation from history if ID is provided (from URL on initial load)
   useEffect(() => {
-    if (conversationId) {
-      loadConversation(conversationId);
+    if (initialConversationId) {
+      loadConversation(initialConversationId);
     }
-  }, [conversationId, loadConversation]);
+  }, [initialConversationId, loadConversation]);
 
   // Show toast for generation recovery
   useEffect(() => {
@@ -133,7 +141,7 @@ export default function BrainstormModePage() {
         onSwitchBranch={switchBranch}
         onRegenerate={regenerateLastMessage}
         canRegenerate={canRegenerate}
-        conversationId={conversationId || undefined}
+        conversationId={currentConversationId || undefined}
         restoredMetadata={restoredMetadata}
         onMetadataChange={handleMetadataChange}
         onSubModeChange={setSubMode}
