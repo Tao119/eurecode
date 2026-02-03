@@ -74,6 +74,13 @@ export default function AccessKeysPage() {
   const [dailyTokenLimit, setDailyTokenLimit] = useState(1000);
   const [expiresIn, setExpiresIn] = useState<"1week" | "1month" | "3months" | "never">("1month");
 
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingKey, setEditingKey] = useState<AccessKey | null>(null);
+  const [editDailyTokenLimit, setEditDailyTokenLimit] = useState(1000);
+  const [editExpiresAt, setEditExpiresAt] = useState<string>("");
+  const [updating, setUpdating] = useState(false);
+
   const fetchKeys = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -159,6 +166,48 @@ export default function AccessKeysPage() {
       }
     } catch (error) {
       console.error("Failed to revoke key:", error);
+    }
+  };
+
+  const openEditDialog = (key: AccessKey) => {
+    setEditingKey(key);
+    setEditDailyTokenLimit(key.dailyTokenLimit);
+    setEditExpiresAt(key.expiresAt ? key.expiresAt.split("T")[0] : "");
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateKey = async () => {
+    if (!editingKey) return;
+
+    setUpdating(true);
+    try {
+      const response = await fetch(`/api/admin/keys/${editingKey.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dailyTokenLimit: editDailyTokenLimit,
+          expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
+        }),
+      });
+
+      // Check for auth error
+      if (isAuthError(response)) {
+        await handleAuthError();
+        return;
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setEditDialogOpen(false);
+        setEditingKey(null);
+        fetchKeys();
+      } else {
+        console.error("Failed to update key:", result.error);
+      }
+    } catch (error) {
+      console.error("Failed to update key:", error);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -367,18 +416,33 @@ export default function AccessKeysPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {key.status !== "revoked" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleRevokeKey(key.id)}
-                          >
-                            <span className="material-symbols-outlined text-lg">
-                              block
-                            </span>
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {key.status !== "revoked" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditDialog(key)}
+                                title="編集"
+                              >
+                                <span className="material-symbols-outlined text-lg">
+                                  edit
+                                </span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleRevokeKey(key.id)}
+                                title="無効化"
+                              >
+                                <span className="material-symbols-outlined text-lg">
+                                  block
+                                </span>
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -501,6 +565,65 @@ export default function AccessKeysPage() {
               すべてコピー
             </Button>
             <Button onClick={() => setShowCreatedDialog(false)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Key Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>アクセスキーを編集</DialogTitle>
+            <DialogDescription>
+              {editingKey && (
+                <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                  {editingKey.keyCode}
+                </code>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {editingKey?.user && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">使用者</p>
+                <p className="font-medium">{editingKey.user.displayName}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="editDailyTokenLimit">1日あたりのトークン上限</Label>
+              <Input
+                id="editDailyTokenLimit"
+                type="number"
+                min={100}
+                max={100000}
+                value={editDailyTokenLimit}
+                onChange={(e) => setEditDailyTokenLimit(parseInt(e.target.value) || 1000)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editExpiresAt">有効期限</Label>
+              <Input
+                id="editExpiresAt"
+                type="date"
+                value={editExpiresAt}
+                onChange={(e) => setEditExpiresAt(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                空欄にすると無期限になります
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={updating}
+            >
+              キャンセル
+            </Button>
+            <Button onClick={handleUpdateKey} disabled={updating}>
+              {updating ? "更新中..." : "保存"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
