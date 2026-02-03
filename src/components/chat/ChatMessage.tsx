@@ -37,23 +37,6 @@ interface DetectedOptions {
 }
 
 function detectOptions(content: string): DetectedOptions | null {
-  // Skip if the message asks for a reason (free-form input expected)
-  const reasonPatterns = [
-    /なぜ.{0,20}(思|考|判断|選)/,
-    /どうして.{0,20}(思|考|判断|選)/,
-    /理由.{0,10}(教|聞|説明)/,
-    /そう(思|考|判断).{0,10}(まし|のか|のです)/,
-    /その理由/,
-    /なぜですか/,
-    /どうしてですか/,
-  ];
-
-  for (const pattern of reasonPatterns) {
-    if (pattern.test(content)) {
-      return null;
-    }
-  }
-
   // Patterns for n-choice options - try multiple formats
   const optionPatterns = [
     // Standard format: A) text, A. text, A: text, A） text
