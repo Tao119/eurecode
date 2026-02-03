@@ -173,6 +173,9 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedStateRef = useRef<string>("");
   const initialStateAppliedRef = useRef(false);
+  // 初期状態の読み込みが完了するまで保存をブロック
+  // conversationId がある場合、初期状態が適用されるまで待機
+  const canSaveRef = useRef(!conversationId);
 
   // skipAllowed の場合: totalQuestions=0, unlockLevel=0 → 0 >= 0 で即アンロック
   const defaultTotalQuestions = skipAllowed ? 0 : 3;
@@ -195,6 +198,7 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
 
     if (initialState) {
       initialStateAppliedRef.current = true;
+      canSaveRef.current = true; // 初期状態が同期的に適用された場合は保存許可
       return {
         ...defaultState,
         phase: initialState.phase || "initial",
@@ -224,6 +228,8 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     if (!initialState || initialStateAppliedRef.current) return;
 
     initialStateAppliedRef.current = true;
+    canSaveRef.current = true; // 初期状態が適用されたので保存を許可
+
     setState((prev) => ({
       ...prev,
       phase: initialState.phase || prev.phase,
@@ -231,13 +237,29 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       totalQuestions: skipAllowed ? 0 : (initialState.totalQuestions ?? prev.totalQuestions),
       artifacts: { ...prev.artifacts, ...initialState.artifacts },
       activeArtifactId: initialState.activeArtifactId || prev.activeArtifactId,
+      // 重要: 初期状態の進行状況を優先（既存の状態にマージ）
       artifactProgress: { ...prev.artifactProgress, ...initialState.artifactProgress },
       quizHistory: initialState.quizHistory?.length ? initialState.quizHistory : prev.quizHistory,
     }));
   }, [initialState, skipAllowed]);
 
+  // 初期状態が一定時間内に届かない場合は保存を許可（新規会話の場合）
+  useEffect(() => {
+    if (canSaveRef.current) return;
+
+    const timeout = setTimeout(() => {
+      if (!canSaveRef.current) {
+        canSaveRef.current = true;
+      }
+    }, 2000); // 2秒後に初期状態がなければ新規会話と判断
+
+    return () => clearTimeout(timeout);
+  }, []);
+
   // 状態が変更されたらAPIに保存（デバウンス付き）
   useEffect(() => {
+    // 初期状態の読み込みが完了するまで保存をブロック
+    if (!canSaveRef.current) return;
     if (!conversationId || state.phase === "initial") return;
 
     const stateHash = JSON.stringify({
