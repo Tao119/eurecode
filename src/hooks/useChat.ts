@@ -85,6 +85,10 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
   const abortControllerRef = useRef<AbortController | null>(null);
   const branchStateRef = useRef<ChatBranchState>(branchState);
   const externalMetadataRef = useRef<Partial<ConversationMetadata>>(externalMetadata);
+  const isStreamingRef = useRef<boolean>(false);
+  const pendingSaveRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
 
   // Keep metadata ref in sync
   useEffect(() => {
@@ -126,16 +130,34 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
     } as ConversationMetadata;
   }, []);
 
-  // Save conversation to server (debounced)
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Cancel any pending save requests
+      if (saveAbortControllerRef.current) {
+        saveAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Save conversation to server (with error handling and abort support)
   const saveConversation = useCallback(async (msgs: Message[], convId: string | null) => {
-    if (msgs.length === 0) return;
+    if (msgs.length === 0 || !isMountedRef.current) return;
+
+    // Cancel previous save request if still pending
+    if (saveAbortControllerRef.current) {
+      saveAbortControllerRef.current.abort();
+    }
+    saveAbortControllerRef.current = new AbortController();
 
     const metadata = buildMetadata();
 
     try {
       if (convId) {
         // Update existing conversation
-        await fetch("/api/conversations", {
+        const response = await fetch("/api/conversations", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -143,7 +165,12 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
             messages: msgs,
             metadata,
           }),
+          signal: saveAbortControllerRef.current.signal,
         });
+        // Check if response is ok
+        if (!response.ok && isMountedRef.current) {
+          console.warn("Failed to save conversation:", response.status);
+        }
       } else {
         // Create new conversation
         const response = await fetch("/api/conversations", {
@@ -154,21 +181,37 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
             messages: msgs,
             metadata,
           }),
+          signal: saveAbortControllerRef.current.signal,
         });
-        const data = await response.json();
-        if (data.success && data.data?.id) {
-          setConversationId(data.data.id);
-          onConversationCreated?.(data.data.id);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data?.id && isMountedRef.current) {
+            setConversationId(data.data.id);
+            onConversationCreated?.(data.data.id);
+          }
         }
       }
     } catch (err) {
-      console.error("Failed to save conversation:", err);
+      // Ignore abort errors (component unmounted)
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      // Only log if still mounted
+      if (isMountedRef.current) {
+        console.warn("Failed to save conversation:", err);
+      }
     }
   }, [mode, buildMetadata, onConversationCreated]);
 
-  // Debounced save effect
+  // Debounced save effect - skip during streaming to prevent excessive saves
   useEffect(() => {
     if (messages.length === 0) return;
+
+    // If streaming, mark as pending save but don't save yet
+    if (isStreamingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -328,6 +371,7 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
 
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
+      isStreamingRef.current = true;
 
       const userMessage: Message = {
         id: generateId(),
@@ -380,6 +424,7 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
         }
 
         let fullContent = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -391,12 +436,18 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
             break;
           }
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          // Append to buffer and process complete lines
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep incomplete last line in buffer
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            if (trimmedLine.startsWith("data: ")) {
+              const data = trimmedLine.slice(6);
               if (data === "[DONE]") continue;
 
               try {
@@ -432,6 +483,35 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
                   });
                 }
               } catch {
+                // Skip invalid JSON (might be incomplete chunk)
+              }
+            }
+          }
+        }
+
+        // Process any remaining data in buffer
+        if (buffer.trim()) {
+          const trimmedLine = buffer.trim();
+          if (trimmedLine.startsWith("data: ")) {
+            const data = trimmedLine.slice(6);
+            if (data !== "[DONE]") {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullContent += parsed.content;
+                  setMessages((prev) => {
+                    const newMessages = [...prev];
+                    const lastMessage = newMessages[newMessages.length - 1];
+                    if (lastMessage.role === "assistant") {
+                      return [
+                        ...newMessages.slice(0, -1),
+                        { ...lastMessage, content: fullContent },
+                      ];
+                    }
+                    return newMessages;
+                  });
+                }
+              } catch {
                 // Skip invalid JSON
               }
             }
@@ -452,9 +532,18 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
       } finally {
         setIsLoading(false);
         abortControllerRef.current = null;
+        isStreamingRef.current = false;
+
+        // Trigger pending save after streaming completes
+        if (pendingSaveRef.current) {
+          pendingSaveRef.current = false;
+          const currentState = branchStateRef.current;
+          const currentMessages = currentState.messagesByBranch[currentState.currentBranchId] || [];
+          saveConversation(currentMessages, conversationId);
+        }
       }
     },
-    [mode, isLoading, onError, setMessages]
+    [mode, isLoading, onError, setMessages, conversationId, saveConversation]
   );
 
   const clearMessages = useCallback(() => {
@@ -498,6 +587,7 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
 
     // Create abort controller for this request
     abortControllerRef.current = new AbortController();
+    isStreamingRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -539,6 +629,7 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
       }
 
       let fullContent = "";
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -550,12 +641,18 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
           break;
         }
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        // Append to buffer and process complete lines
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep incomplete last line in buffer
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+
+          if (trimmedLine.startsWith("data: ")) {
+            const data = trimmedLine.slice(6);
             if (data === "[DONE]") continue;
 
             try {
@@ -591,6 +688,35 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
                 });
               }
             } catch {
+              // Skip invalid JSON (might be incomplete chunk)
+            }
+          }
+        }
+      }
+
+      // Process any remaining data in buffer
+      if (buffer.trim()) {
+        const trimmedLine = buffer.trim();
+        if (trimmedLine.startsWith("data: ")) {
+          const data = trimmedLine.slice(6);
+          if (data !== "[DONE]") {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                fullContent += parsed.content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  if (lastMessage.role === "assistant") {
+                    return [
+                      ...newMessages.slice(0, -1),
+                      { ...lastMessage, content: fullContent },
+                    ];
+                  }
+                  return newMessages;
+                });
+              }
+            } catch {
               // Skip invalid JSON
             }
           }
@@ -611,8 +737,17 @@ export function useChat({ mode, conversationId: initialConversationId, onError, 
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      isStreamingRef.current = false;
+
+      // Trigger pending save after streaming completes
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        const latestState = branchStateRef.current;
+        const latestMessages = latestState.messagesByBranch[latestState.currentBranchId] || [];
+        saveConversation(latestMessages, conversationId);
+      }
     }
-  }, [canRegenerate, isLoading, mode, onError, setMessages]);
+  }, [canRegenerate, isLoading, mode, onError, setMessages, conversationId, saveConversation]);
 
   // Set external metadata (e.g., brainstorm state from BrainstormChatContainer)
   const setExternalMetadata = useCallback((metadata: Partial<ConversationMetadata>) => {

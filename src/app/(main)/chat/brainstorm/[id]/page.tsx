@@ -45,10 +45,11 @@ export default function BrainstormRoomPage({ params }: PageProps) {
     [setExternalMetadata]
   );
 
-  // Load conversation on mount
+  // Load conversation on mount (only when conversationId changes)
   useEffect(() => {
     loadConversation(conversationId);
-  }, [conversationId, loadConversation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   // Show toast for generation recovery
   useEffect(() => {

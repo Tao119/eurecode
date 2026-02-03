@@ -119,11 +119,24 @@ export function BrainstormChatContainer({
     }
   }, [restoredMetadata, hasRestoredState, restoreState]);
 
-  // Notify parent when brainstorm state changes (for saving)
+  // Notify parent when brainstorm state changes (for saving) - debounced to prevent excessive updates
+  const metadataTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     if (onMetadataChange && hasRestoredState) {
-      onMetadataChange({ brainstormState: state });
+      // Clear existing timeout
+      if (metadataTimeoutRef.current) {
+        clearTimeout(metadataTimeoutRef.current);
+      }
+      // Debounce metadata updates
+      metadataTimeoutRef.current = setTimeout(() => {
+        onMetadataChange({ brainstormState: state });
+      }, 500);
     }
+    return () => {
+      if (metadataTimeoutRef.current) {
+        clearTimeout(metadataTimeoutRef.current);
+      }
+    };
   }, [state, onMetadataChange, hasRestoredState]);
 
   const [showPhaseTransition, setShowPhaseTransition] = useState(false);
