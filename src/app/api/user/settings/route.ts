@@ -27,7 +27,15 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { settings: true },
+      select: {
+        settings: true,
+        userType: true,
+        accessKey: {
+          select: {
+            settings: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -55,6 +63,14 @@ export async function GET() {
       ...DEFAULT_USER_SETTINGS,
       ...(user.settings as Partial<UserSettings> | null),
     };
+
+    // For member users, apply AccessKey settings (unlockSkipAllowed)
+    if (user.userType === "member" && user.accessKey?.settings) {
+      const accessKeySettings = user.accessKey.settings as { unlockSkipAllowed?: boolean };
+      if (accessKeySettings.unlockSkipAllowed !== undefined) {
+        settings.unlockSkipAllowed = accessKeySettings.unlockSkipAllowed;
+      }
+    }
 
     return NextResponse.json({
       success: true,
