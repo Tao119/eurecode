@@ -197,7 +197,7 @@ export function GenerationChatContainer({
         }
       }
     }
-  }, [messages, addOrUpdateArtifact, setPhase, setCurrentQuiz, state.unlockLevel, state.phase]);
+  }, [messages, addOrUpdateArtifact, setPhase, setCurrentQuiz, state.unlockLevel, state.totalQuestions, state.phase]);
 
   // ストリーミング中のアーティファクト検出（即座にパネルを開く）
   const streamingArtifactRef = useRef<Set<string>>(new Set());
@@ -272,13 +272,15 @@ export function GenerationChatContainer({
     }
 
     // クイズを抽出（アーティファクトがある場合、またはcoding/unlockingフェーズの場合）
-    if (artifacts.length > 0 || state.phase === "coding" || state.phase === "unlocking") {
+    // ただし、totalQuestions=0 (制限解除モード) の場合はスキップ
+    const isFullyUnlocked = state.totalQuestions === 0 || state.unlockLevel >= state.totalQuestions;
+    if (!isFullyUnlocked && (artifacts.length > 0 || state.phase === "coding" || state.phase === "unlocking")) {
       const quiz = extractQuizFromResponse(content, state.unlockLevel);
       if (quiz) {
         setCurrentQuiz(quiz);
       }
     }
-  }, [messages, state.phase, state.unlockLevel, setPhase, setCurrentQuiz, addOrUpdateArtifact]);
+  }, [messages, state.phase, state.unlockLevel, state.totalQuestions, setPhase, setCurrentQuiz, addOrUpdateArtifact]);
 
   // クイズが必要な場合に自動生成（フォールバック）
   useEffect(() => {
