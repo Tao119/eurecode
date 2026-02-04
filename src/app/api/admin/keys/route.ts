@@ -141,6 +141,18 @@ export async function GET(request: NextRequest) {
       statusSummary[stat.status as keyof typeof statusSummary] = stat._count.id;
     }
 
+    // Calculate total allocated credits (active + used keys only)
+    const allocatedCredits = await prisma.accessKey.aggregate({
+      where: {
+        organizationId: session.user.organizationId,
+        status: { in: ["active", "used"] },
+      },
+      _sum: { dailyTokenLimit: true },
+    });
+    const totalAllocatedCredits = allocatedCredits._sum.dailyTokenLimit || 0;
+    const maxOrgCredits = orgPlanConfig?.features.monthlyConversationPoints || 0;
+    const remainingAllocatable = Math.max(0, maxOrgCredits - totalAllocatedCredits);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -155,10 +167,15 @@ export async function GET(request: NextRequest) {
           ? {
               plan: orgPlanConfig.id,
               name: orgPlanConfig.nameJa,
-              maxCreditsPerMember: orgPlanConfig.features.monthlyConversationPoints,
+              maxCredits: orgPlanConfig.features.monthlyConversationPoints,
               maxMembers: orgPlanConfig.maxMembers,
             }
           : null,
+        creditAllocation: {
+          total: maxOrgCredits,
+          allocated: totalAllocatedCredits,
+          remaining: remainingAllocatable,
+        },
       },
     });
   } catch (error) {
@@ -173,7 +190,7 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/keys - Create new access key(s)
 const createKeySchema = z.object({
   count: z.number().int().min(1).max(100).default(1),
-  dailyTokenLimit: z.number().int().min(100).max(100000).default(1000),
+  dailyTokenLimit: z.number().int().min(1).max(100000).default(100),
   expiresIn: z.enum(["1week", "1month", "3months", "never"]).default("1month"),
   settings: z.object({
     allowedModes: z.array(z.enum(["explanation", "generation", "brainstorm"])).optional(),
@@ -217,6 +234,52 @@ export async function POST(request: NextRequest) {
     }
 
     const { count, dailyTokenLimit, expiresIn, settings } = parsed.data;
+
+    // Get organization plan limits
+    const organization = await prisma.organization.findUnique({
+      where: { id: session.user.organizationId },
+      select: { plan: true },
+    });
+
+    const orgPlanConfig = organization
+      ? getOrganizationPlan(organization.plan)
+      : null;
+
+    const maxOrgCredits = orgPlanConfig?.features.monthlyConversationPoints || 0;
+
+    // Calculate current allocated credits
+    const allocatedCredits = await prisma.accessKey.aggregate({
+      where: {
+        organizationId: session.user.organizationId,
+        status: { in: ["active", "used"] },
+      },
+      _sum: { dailyTokenLimit: true },
+    });
+    const totalAllocatedCredits = allocatedCredits._sum.dailyTokenLimit || 0;
+
+    // Check if new keys would exceed the limit
+    const newTotalCredits = dailyTokenLimit * count;
+    const projectedTotal = totalAllocatedCredits + newTotalCredits;
+
+    if (maxOrgCredits > 0 && projectedTotal > maxOrgCredits) {
+      const remainingAllocatable = Math.max(0, maxOrgCredits - totalAllocatedCredits);
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CREDIT_LIMIT_EXCEEDED",
+            message: `クレジット上限を超えています。割り当て可能な残りクレジット: ${remainingAllocatable}pt`,
+            details: {
+              maxCredits: maxOrgCredits,
+              allocated: totalAllocatedCredits,
+              remaining: remainingAllocatable,
+              requested: newTotalCredits,
+            },
+          },
+        },
+        { status: 400 }
+      );
+    }
 
     // Calculate expiration date
     let expiresAt: Date | null = null;

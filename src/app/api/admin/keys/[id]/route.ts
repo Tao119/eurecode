@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import { getOrganizationPlan } from "@/config/plans";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // PUT /api/admin/keys/:id - Update key
 const updateKeySchema = z.object({
-  dailyTokenLimit: z.number().int().min(100).max(100000).optional(),
+  dailyTokenLimit: z.number().int().min(1).max(100000).optional(),
   // Accept null, undefined, or any string that can be parsed as a date
   expiresAt: z.union([z.string(), z.null()]).optional(),
   settings: z.object({
@@ -152,6 +153,55 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     const { dailyTokenLimit, expiresAt, settings } = parsed.data;
+
+    // If credit limit is being updated, check the organization limit
+    if (dailyTokenLimit !== undefined) {
+      // Get organization plan limits
+      const organization = await prisma.organization.findUnique({
+        where: { id: session.user.organizationId },
+        select: { plan: true },
+      });
+
+      const orgPlanConfig = organization
+        ? getOrganizationPlan(organization.plan)
+        : null;
+
+      const maxOrgCredits = orgPlanConfig?.features.monthlyConversationPoints || 0;
+
+      // Calculate current allocated credits (excluding this key)
+      const allocatedCredits = await prisma.accessKey.aggregate({
+        where: {
+          organizationId: session.user.organizationId,
+          status: { in: ["active", "used"] },
+          id: { not: id }, // Exclude the current key
+        },
+        _sum: { dailyTokenLimit: true },
+      });
+      const totalAllocatedCredits = allocatedCredits._sum.dailyTokenLimit || 0;
+
+      // Check if the update would exceed the limit
+      const projectedTotal = totalAllocatedCredits + dailyTokenLimit;
+
+      if (maxOrgCredits > 0 && projectedTotal > maxOrgCredits) {
+        const remainingAllocatable = Math.max(0, maxOrgCredits - totalAllocatedCredits);
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "CREDIT_LIMIT_EXCEEDED",
+              message: `クレジット上限を超えています。このキーに割り当て可能な上限: ${remainingAllocatable}pt`,
+              details: {
+                maxCredits: maxOrgCredits,
+                allocated: totalAllocatedCredits,
+                remaining: remainingAllocatable,
+                requested: dailyTokenLimit,
+              },
+            },
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Validate expiresAt if provided
     let parsedExpiresAt: Date | null = null;

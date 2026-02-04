@@ -53,6 +53,12 @@ interface OrganizationPlanInfo {
   maxMembers: number | null;
 }
 
+interface CreditAllocation {
+  total: number;
+  allocated: number;
+  remaining: number;
+}
+
 interface KeysResponse {
   keys: AccessKey[];
   pagination: {
@@ -67,6 +73,7 @@ interface KeysResponse {
     revoked: number;
   };
   organizationPlan: OrganizationPlanInfo | null;
+  creditAllocation: CreditAllocation | null;
 }
 
 const statusLabels: Record<AccessKey["status"], { label: string; color: string }> = {
@@ -105,8 +112,10 @@ export default function AccessKeysPage() {
   // Re-issue state
   const [reissuing, setReissuing] = useState<string | null>(null);
 
-  // Max credits from plan
-  const maxCredits = data?.organizationPlan?.maxCreditsPerMember || 10000;
+  // Credit allocation info
+  const creditAllocation = data?.creditAllocation;
+  const maxCreditsPerMember = data?.organizationPlan?.maxCreditsPerMember || 10000;
+  const remainingAllocatable = creditAllocation?.remaining ?? maxCreditsPerMember;
 
   const fetchKeys = useCallback(async () => {
     try {
@@ -147,6 +156,19 @@ export default function AccessKeysPage() {
   }, [data?.organizationPlan?.maxCreditsPerMember]);
 
   const handleGenerateKeys = async () => {
+    // Validate credit limit (min 1)
+    if (creditLimit < 1) {
+      alert("クレジット上限は1以上を設定してください");
+      return;
+    }
+
+    // Check if total requested credits exceed remaining allocatable
+    const totalRequestedCredits = creditLimit * keyCount;
+    if (totalRequestedCredits > remainingAllocatable) {
+      alert(`クレジット上限を超えています。\n割り当て可能な残りクレジット: ${remainingAllocatable.toLocaleString()}pt\n要求したクレジット: ${totalRequestedCredits.toLocaleString()}pt`);
+      return;
+    }
+
     setCreating(true);
     try {
       const response = await fetch("/api/admin/keys", {
@@ -172,10 +194,17 @@ export default function AccessKeysPage() {
         setShowCreatedDialog(true);
         fetchKeys();
       } else {
-        console.error("Failed to create keys:", result.error);
+        // Handle credit limit exceeded error
+        if (result.error?.code === "CREDIT_LIMIT_EXCEEDED") {
+          alert(result.error.message);
+        } else {
+          console.error("Failed to create keys:", result.error);
+          alert(result.error?.message || "キーの発行に失敗しました");
+        }
       }
     } catch (error) {
       console.error("Failed to create keys:", error);
+      alert("キーの発行に失敗しました");
     } finally {
       setCreating(false);
     }
@@ -245,6 +274,20 @@ export default function AccessKeysPage() {
   const handleUpdateKey = async () => {
     if (!editingKey) return;
 
+    // Validate credit limit (min 1)
+    if (editCreditLimit < 1) {
+      alert("クレジット上限は1以上を設定してください");
+      return;
+    }
+
+    // Calculate max allowed for this key (remaining + current key's value)
+    const currentKeyCredits = editingKey.dailyTokenLimit;
+    const maxForThisKey = remainingAllocatable + currentKeyCredits;
+    if (editCreditLimit > maxForThisKey) {
+      alert(`クレジット上限を超えています。\nこのキーに割り当て可能な上限: ${maxForThisKey.toLocaleString()}pt`);
+      return;
+    }
+
     setUpdating(true);
     try {
       const requestBody = {
@@ -273,14 +316,20 @@ export default function AccessKeysPage() {
         setEditingKey(null);
         fetchKeys();
       } else {
-        console.error("Failed to update key:", result.error);
-        // Show detailed validation errors
-        if (result.error?.details) {
-          console.error("Validation details:", JSON.stringify(result.error.details, null, 2));
+        // Handle credit limit exceeded error
+        if (result.error?.code === "CREDIT_LIMIT_EXCEEDED") {
+          alert(result.error.message);
+        } else {
+          console.error("Failed to update key:", result.error);
+          if (result.error?.details) {
+            console.error("Validation details:", JSON.stringify(result.error.details, null, 2));
+          }
+          alert(result.error?.message || "更新に失敗しました");
         }
       }
     } catch (error) {
       console.error("Failed to update key:", error);
+      alert("更新に失敗しました");
     } finally {
       setUpdating(false);
     }
@@ -345,38 +394,82 @@ export default function AccessKeysPage() {
         </Button>
       </div>
 
-      {/* Admin's Own Credits */}
+      {/* Organization Credit Allocation */}
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">person</span>
-            管理者（自分）のクレジット
+            <span className="material-symbols-outlined text-primary">analytics</span>
+            組織クレジット割り振り状況
           </CardTitle>
+          {data?.organizationPlan && (
+            <CardDescription>
+              プラン: {data.organizationPlan.name} / メンバー上限: {data.organizationPlan.maxMembers || "無制限"}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex-1">
-              {adminCredits.isLoading ? (
-                <Skeleton className="h-8 w-32" />
-              ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold text-primary">
-                    {adminCredits.totalRemaining.toLocaleString()}
+          <div className="space-y-4">
+            {/* Progress bar */}
+            {creditAllocation && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">割り当て済み</span>
+                  <span className="font-medium">
+                    {creditAllocation.allocated.toLocaleString()} / {creditAllocation.total.toLocaleString()} pt
                   </span>
-                  <span className="text-muted-foreground">クレジット残</span>
                 </div>
-              )}
-              <p className="text-sm text-muted-foreground mt-1">
-                Sonnet: 約{adminCredits.remainingConversations.sonnet}回 / Opus: 約{adminCredits.remainingConversations.opus}回
-              </p>
-            </div>
-            {data?.organizationPlan && (
-              <div className="text-sm text-muted-foreground">
-                <p>プラン: {data.organizationPlan.name}</p>
-                <p>メンバー上限: {data.organizationPlan.maxMembers || "無制限"}</p>
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${Math.min((creditAllocation.allocated / creditAllocation.total) * 100, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>割り当て可能残り: <span className="text-primary font-medium">{creditAllocation.remaining.toLocaleString()}pt</span></span>
+                  <span>{((creditAllocation.allocated / creditAllocation.total) * 100).toFixed(1)}% 使用</span>
+                </div>
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Admin's Own Credits (like a member) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-500">shield_person</span>
+            管理者（自分）
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {adminCredits.isLoading ? (
+            <Skeleton className="h-12 w-full" />
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-2xl font-bold text-primary">
+                    {adminCredits.totalRemaining.toLocaleString()}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">pt</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Sonnet: 約{adminCredits.remainingConversations.sonnet}回 / Opus: 約{adminCredits.remainingConversations.opus}回
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400">
+                  管理者
+                </span>
+                {adminCredits.allocated && (
+                  <span className="text-xs text-muted-foreground">
+                    上限: {adminCredits.allocated.total.toLocaleString()}pt
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -618,14 +711,23 @@ export default function AccessKeysPage() {
               <Input
                 id="creditLimit"
                 type="number"
-                min={1}
-                max={maxCredits}
+                min={0}
+                max={remainingAllocatable}
                 value={creditLimit}
-                onChange={(e) => setCreditLimit(Math.min(parseInt(e.target.value) || 1, maxCredits))}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? 0 : parseInt(e.target.value);
+                  setCreditLimit(isNaN(value) ? 0 : value);
+                }}
               />
               <p className="text-xs text-muted-foreground">
-                プラン上限: {maxCredits.toLocaleString()}pt
+                割り当て可能な残り: <span className="font-medium text-primary">{remainingAllocatable.toLocaleString()}pt</span>
+                {creditAllocation && (
+                  <> / 組織上限: {creditAllocation.total.toLocaleString()}pt（割り当て済み: {creditAllocation.allocated.toLocaleString()}pt）</>
+                )}
               </p>
+              {creditLimit < 1 && (
+                <p className="text-xs text-amber-500">※ 1以上の値を設定してください</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>有効期限</Label>
@@ -733,14 +835,22 @@ export default function AccessKeysPage() {
               <Input
                 id="editCreditLimit"
                 type="number"
-                min={1}
-                max={maxCredits}
+                min={0}
                 value={editCreditLimit}
-                onChange={(e) => setEditCreditLimit(Math.min(parseInt(e.target.value) || 1, maxCredits))}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? 0 : parseInt(e.target.value);
+                  setEditCreditLimit(isNaN(value) ? 0 : value);
+                }}
               />
               <p className="text-xs text-muted-foreground">
-                プラン上限: {maxCredits.toLocaleString()}pt
+                割り当て可能な上限: <span className="font-medium text-primary">{(remainingAllocatable + (editingKey?.dailyTokenLimit || 0)).toLocaleString()}pt</span>
+                {creditAllocation && (
+                  <> / 組織上限: {creditAllocation.total.toLocaleString()}pt</>
+                )}
               </p>
+              {editCreditLimit < 1 && (
+                <p className="text-xs text-amber-500">※ 1以上の値を設定してください</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="editExpiresAt">有効期限</Label>
