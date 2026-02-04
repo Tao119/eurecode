@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useSession } from "next-auth/react";
 import type { AIModel, IndividualPlan, OrganizationPlan } from "@/config/plans";
 
 interface CreditState {
@@ -90,9 +91,17 @@ const defaultState: CreditState = {
 };
 
 export function useCredits(): UseCreditReturn {
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated" && !!session;
   const [state, setState] = useState<CreditState>(defaultState);
 
   const fetchCredits = useCallback(async () => {
+    // 未認証の場合はフェッチしない
+    if (!isAuthenticated) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      return;
+    }
+
     try {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
@@ -131,10 +140,16 @@ export function useCredits(): UseCreditReturn {
         error: error instanceof Error ? error.message : "Unknown error",
       }));
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    // セッションのローディング中はスキップ
+    if (status === "loading") return;
+
     fetchCredits();
+
+    // 未認証の場合はイベントリスナーを登録しない
+    if (!isAuthenticated) return;
 
     // ウィンドウにフォーカスが戻った時にクレジットを再取得
     const handleFocus = () => {
@@ -155,7 +170,7 @@ export function useCredits(): UseCreditReturn {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchCredits]);
+  }, [fetchCredits, isAuthenticated, status]);
 
   /**
    * ポイントを消費（ローカル状態を即時更新）
