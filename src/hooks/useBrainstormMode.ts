@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { BrainstormPhase, BrainstormSubMode, PlanStep, BrainstormModeState } from "@/types/chat";
+import type {
+  BrainstormPhase,
+  BrainstormSubMode,
+  PlanStep,
+  BrainstormModeState,
+  PhaseProgress,
+  PhaseCompletionCriteria,
+  PhaseTransitionPolicy,
+  TransitionSuggestion,
+} from "@/types/chat";
 
 // BrainstormModeStateを再エクスポート（既存コードとの互換性のため）
 export type { BrainstormModeState } from "@/types/chat";
@@ -128,6 +137,93 @@ export const PHASE_INFO: Record<
   },
 };
 
+// ===========================================
+// フェーズ完了条件の定義
+// ===========================================
+export const PHASE_COMPLETION_CRITERIA: PhaseCompletionCriteria[] = [
+  {
+    phase: "verbalization",
+    requiredFields: ["ideaSummary"],
+    optionalFields: [],
+    minCompletionScore: 100,  // アイデアサマリーは必須
+  },
+  {
+    phase: "persona",
+    requiredFields: ["targetUser", "painPoint"],
+    optionalFields: ["scenario"],
+    minCompletionScore: 70,  // 2つのうち1つ以上
+  },
+  {
+    phase: "market",
+    requiredFields: ["competitors"],
+    optionalFields: ["differentiation", "marketSize"],
+    minCompletionScore: 50,
+  },
+  {
+    phase: "technology",
+    requiredFields: ["platform"],
+    optionalFields: ["techStack", "constraints"],
+    minCompletionScore: 60,
+  },
+  {
+    phase: "impact",
+    requiredFields: ["valueProposition"],
+    optionalFields: ["metrics", "vision"],
+    minCompletionScore: 50,
+  },
+  {
+    phase: "mvp",
+    requiredFields: ["coreFeatures"],
+    optionalFields: ["excludedFeatures", "successCriteria"],
+    minCompletionScore: 70,
+  },
+  {
+    phase: "task-breakdown",
+    requiredFields: ["tasks"],
+    optionalFields: ["priorities", "dependencies"],
+    minCompletionScore: 60,
+  },
+];
+
+// フェーズ完了条件を取得するヘルパー
+export function getPhaseCompletionCriteria(phase: BrainstormPhase): PhaseCompletionCriteria {
+  return PHASE_COMPLETION_CRITERIA.find(c => c.phase === phase) || PHASE_COMPLETION_CRITERIA[0];
+}
+
+// ===========================================
+// デフォルトのPhaseProgress初期化
+// ===========================================
+function createDefaultPhaseProgress(): Record<BrainstormPhase, PhaseProgress> {
+  const now = new Date().toISOString();
+  const phases: BrainstormPhase[] = [
+    "verbalization", "persona", "market", "technology", "impact", "mvp", "task-breakdown"
+  ];
+
+  const progress: Partial<Record<BrainstormPhase, PhaseProgress>> = {};
+  for (const phase of phases) {
+    const criteria = getPhaseCompletionCriteria(phase);
+    const collectedInfo: Record<string, string | null> = {};
+    for (const field of [...criteria.requiredFields, ...criteria.optionalFields]) {
+      collectedInfo[field] = null;
+    }
+    progress[phase] = {
+      phase,
+      collectedInfo,
+      completionScore: 0,
+      isUserConfirmed: false,
+      lastUpdated: now,
+    };
+  }
+  return progress as Record<BrainstormPhase, PhaseProgress>;
+}
+
+// デフォルトの遷移提案
+const DEFAULT_TRANSITION_SUGGESTION: TransitionSuggestion = {
+  isVisible: false,
+  targetPhase: null,
+  reason: null,
+};
+
 // デフォルト初期状態
 const DEFAULT_BRAINSTORM_STATE: BrainstormModeState = {
   subMode: "casual",
@@ -140,6 +236,9 @@ const DEFAULT_BRAINSTORM_STATE: BrainstormModeState = {
   mvpFeatures: [],
   planSteps: [],
   insights: [],
+  phaseProgress: createDefaultPhaseProgress(),
+  transitionPolicy: "suggest",  // デフォルトは suggest
+  transitionSuggestion: DEFAULT_TRANSITION_SUGGESTION,
 };
 
 export { DEFAULT_BRAINSTORM_STATE };
@@ -290,6 +389,173 @@ export function useBrainstormMode(options?: UseBrainstormModeOptions) {
     setState((prev) => ({ ...prev, subMode }));
   }, []);
 
+  // ===========================================
+  // フェーズ進行度管理（新機能）
+  // ===========================================
+
+  /**
+   * フェーズの充足度を計算
+   */
+  const calculateCompletionScore = useCallback((phase: BrainstormPhase, collectedInfo: Record<string, string | null>): number => {
+    const criteria = getPhaseCompletionCriteria(phase);
+    const totalFields = criteria.requiredFields.length + criteria.optionalFields.length;
+    if (totalFields === 0) return 100;
+
+    // 必須フィールドの充足度（70%の重み）
+    const requiredFilled = criteria.requiredFields.filter(f => collectedInfo[f] !== null).length;
+    const requiredScore = criteria.requiredFields.length > 0
+      ? (requiredFilled / criteria.requiredFields.length) * 70
+      : 70;
+
+    // オプションフィールドの充足度（30%の重み）
+    const optionalFilled = criteria.optionalFields.filter(f => collectedInfo[f] !== null).length;
+    const optionalScore = criteria.optionalFields.length > 0
+      ? (optionalFilled / criteria.optionalFields.length) * 30
+      : 30;
+
+    return Math.round(requiredScore + optionalScore);
+  }, []);
+
+  /**
+   * フェーズの情報を更新
+   */
+  const updatePhaseInfo = useCallback((phase: BrainstormPhase, fieldName: string, value: string | null) => {
+    setState((prev) => {
+      const currentProgress = prev.phaseProgress[phase];
+      const newCollectedInfo = {
+        ...currentProgress.collectedInfo,
+        [fieldName]: value,
+      };
+      const newScore = calculateCompletionScore(phase, newCollectedInfo);
+
+      return {
+        ...prev,
+        phaseProgress: {
+          ...prev.phaseProgress,
+          [phase]: {
+            ...currentProgress,
+            collectedInfo: newCollectedInfo,
+            completionScore: newScore,
+            lastUpdated: new Date().toISOString(),
+          },
+        },
+      };
+    });
+  }, [calculateCompletionScore]);
+
+  /**
+   * 複数のフェーズ情報を一括更新
+   */
+  const updatePhaseInfoBatch = useCallback((phase: BrainstormPhase, updates: Record<string, string | null>) => {
+    setState((prev) => {
+      const currentProgress = prev.phaseProgress[phase];
+      const newCollectedInfo = {
+        ...currentProgress.collectedInfo,
+        ...updates,
+      };
+      const newScore = calculateCompletionScore(phase, newCollectedInfo);
+
+      return {
+        ...prev,
+        phaseProgress: {
+          ...prev.phaseProgress,
+          [phase]: {
+            ...currentProgress,
+            collectedInfo: newCollectedInfo,
+            completionScore: newScore,
+            lastUpdated: new Date().toISOString(),
+          },
+        },
+      };
+    });
+  }, [calculateCompletionScore]);
+
+  /**
+   * 遷移提案を表示
+   */
+  const showTransitionSuggestion = useCallback((targetPhase: BrainstormPhase, reason: string) => {
+    setState((prev) => ({
+      ...prev,
+      transitionSuggestion: {
+        isVisible: true,
+        targetPhase,
+        reason,
+      },
+    }));
+  }, []);
+
+  /**
+   * 遷移提案を非表示（キャンセル）
+   */
+  const dismissTransitionSuggestion = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      transitionSuggestion: DEFAULT_TRANSITION_SUGGESTION,
+    }));
+  }, []);
+
+  /**
+   * 遷移提案を承認して次のフェーズへ進む
+   */
+  const acceptTransitionSuggestion = useCallback(() => {
+    setState((prev) => {
+      const targetPhase = prev.transitionSuggestion.targetPhase;
+      if (!targetPhase) return prev;
+
+      const currentIndex = BRAINSTORM_PHASES.indexOf(prev.currentPhase);
+      const targetIndex = BRAINSTORM_PHASES.indexOf(targetPhase);
+
+      // ユーザー確認フラグを立てる
+      const updatedPhaseProgress = { ...prev.phaseProgress };
+      updatedPhaseProgress[prev.currentPhase] = {
+        ...updatedPhaseProgress[prev.currentPhase],
+        isUserConfirmed: true,
+      };
+
+      // 前進する場合は途中のフェーズを完了済みにする
+      let newCompletedPhases = [...prev.completedPhases];
+      if (targetIndex > currentIndex) {
+        const phasesToComplete = BRAINSTORM_PHASES.slice(currentIndex, targetIndex);
+        for (const p of phasesToComplete) {
+          if (!newCompletedPhases.includes(p)) {
+            newCompletedPhases.push(p);
+          }
+        }
+      }
+
+      return {
+        ...prev,
+        currentPhase: targetPhase,
+        completedPhases: newCompletedPhases,
+        phaseProgress: updatedPhaseProgress,
+        transitionSuggestion: DEFAULT_TRANSITION_SUGGESTION,
+      };
+    });
+  }, []);
+
+  /**
+   * 現在のフェーズの進行度を取得
+   */
+  const getCurrentPhaseProgress = useCallback((): PhaseProgress => {
+    return state.phaseProgress[state.currentPhase];
+  }, [state.phaseProgress, state.currentPhase]);
+
+  /**
+   * 現在のフェーズが遷移可能かチェック
+   */
+  const canTransitionToNext = useCallback((): boolean => {
+    const progress = state.phaseProgress[state.currentPhase];
+    const criteria = getPhaseCompletionCriteria(state.currentPhase);
+    return progress.completionScore >= criteria.minCompletionScore;
+  }, [state.phaseProgress, state.currentPhase]);
+
+  /**
+   * 遷移ポリシーを変更
+   */
+  const setTransitionPolicy = useCallback((policy: PhaseTransitionPolicy) => {
+    setState((prev) => ({ ...prev, transitionPolicy: policy }));
+  }, []);
+
   // 進捗率を計算
   const progressPercentage =
     (state.completedPhases.length / BRAINSTORM_PHASES.length) * 100;
@@ -325,5 +591,14 @@ export function useBrainstormMode(options?: UseBrainstormModeOptions) {
     reset,
     setSubMode,
     restoreState,
+    // 新しいフェーズ進行度管理
+    updatePhaseInfo,
+    updatePhaseInfoBatch,
+    showTransitionSuggestion,
+    dismissTransitionSuggestion,
+    acceptTransitionSuggestion,
+    getCurrentPhaseProgress,
+    canTransitionToNext,
+    setTransitionPolicy,
   };
 }

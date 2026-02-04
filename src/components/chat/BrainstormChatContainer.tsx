@@ -13,6 +13,7 @@ import {
   useBrainstormMode,
   BRAINSTORM_PHASES,
   PHASE_INFO,
+  getPhaseCompletionCriteria,
 } from "@/hooks/useBrainstormMode";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
 import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata, FileAttachment } from "@/types/chat";
@@ -47,6 +48,7 @@ interface BrainstormChatContainerProps {
 }
 
 // AIレスポンスから適切なフェーズを検出（会話内容から判断）
+// 注意: この関数は参考情報としてのみ使用し、自動遷移には使わない
 function detectAppropriatePhase(content: string): BrainstormPhase | null {
   // 各フェーズを示すキーワード（優先度順：後のフェーズほど優先）
   const phaseIndicators: { phase: BrainstormPhase; keywords: string[] }[] = [
@@ -67,6 +69,148 @@ function detectAppropriatePhase(content: string): BrainstormPhase | null {
   }
 
   return null;
+}
+
+/**
+ * AIレスポンスから各フェーズの情報を抽出
+ * キーワードマッチングではなく、内容の有無を確認
+ */
+function extractPhaseInfoFromResponse(
+  content: string,
+  currentPhase: BrainstormPhase
+): Record<string, string | null> {
+  const extracted: Record<string, string | null> = {};
+
+  switch (currentPhase) {
+    case "verbalization": {
+      // アイデアの説明があるかチェック
+      const hasIdea = content.length > 50 && (
+        content.includes("という") ||
+        content.includes("です") ||
+        content.includes("サービス") ||
+        content.includes("アプリ") ||
+        content.includes("システム")
+      );
+      if (hasIdea) {
+        // 最初の文をサマリーとして抽出
+        const firstSentence = content.split(/[。！？\n]/)[0];
+        extracted.ideaSummary = firstSentence.slice(0, 100);
+      }
+      break;
+    }
+    case "persona": {
+      // ターゲットユーザーの記述
+      const targetPatterns = [
+        /ターゲット(?:は|：|:)?\s*(.+?)(?:です|。|$)/,
+        /対象(?:は|：|:)?\s*(.+?)(?:です|。|$)/,
+        /(.+?)(?:向け|のため)/,
+      ];
+      for (const pattern of targetPatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          extracted.targetUser = match[1].trim().slice(0, 50);
+          break;
+        }
+      }
+      // 課題・ペインポイントの記述
+      const painPatterns = [
+        /課題(?:は|：|:)?\s*(.+?)(?:です|。|$)/,
+        /困っている(?:こと|点)(?:は|：|:)?\s*(.+?)(?:です|。|$)/,
+        /解決したい(?:こと|問題)(?:は|：|:)?\s*(.+?)(?:です|。|$)/,
+      ];
+      for (const pattern of painPatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          extracted.painPoint = match[1].trim().slice(0, 100);
+          break;
+        }
+      }
+      break;
+    }
+    case "market": {
+      // 競合サービスの言及
+      if (content.includes("競合") || content.includes("類似") || content.includes("既存")) {
+        extracted.competitors = "mentioned";
+      }
+      // 差別化ポイント
+      if (content.includes("差別化") || content.includes("違い") || content.includes("独自")) {
+        extracted.differentiation = "mentioned";
+      }
+      break;
+    }
+    case "technology": {
+      // プラットフォームの記述
+      const platformPatterns = [
+        /(?:Web|ウェブ)(?:アプリ|サイト)/i,
+        /モバイル(?:アプリ)?/,
+        /(?:iOS|Android|iPhone)/i,
+        /デスクトップ/,
+      ];
+      for (const pattern of platformPatterns) {
+        if (pattern.test(content)) {
+          extracted.platform = content.match(pattern)?.[0] || "mentioned";
+          break;
+        }
+      }
+      // 技術スタックの記述
+      const techKeywords = ["React", "Next.js", "Vue", "Python", "Node", "TypeScript", "Firebase", "AWS"];
+      const mentionedTech = techKeywords.filter(tech =>
+        content.toLowerCase().includes(tech.toLowerCase())
+      );
+      if (mentionedTech.length > 0) {
+        extracted.techStack = mentionedTech.join(", ");
+      }
+      break;
+    }
+    case "impact": {
+      // 価値提案の記述
+      if (
+        content.includes("価値") ||
+        content.includes("メリット") ||
+        content.includes("変わる") ||
+        content.includes("できるようになる")
+      ) {
+        extracted.valueProposition = "mentioned";
+      }
+      break;
+    }
+    case "mvp": {
+      // コア機能の記述
+      if (
+        content.includes("最小限") ||
+        content.includes("コア機能") ||
+        content.includes("必須機能") ||
+        content.includes("まず")
+      ) {
+        extracted.coreFeatures = "mentioned";
+      }
+      break;
+    }
+    case "task-breakdown": {
+      // タスクの記述
+      const taskPattern = /^[\s\-\•\*]*(\d+)[.）)]\s*(.+)$/gm;
+      const matches = [...content.matchAll(taskPattern)];
+      if (matches.length > 0) {
+        extracted.tasks = `${matches.length}件`;
+      }
+      break;
+    }
+  }
+
+  return extracted;
+}
+
+/**
+ * 完了判定のキーワードを検出
+ */
+function detectCompletionIntent(content: string): boolean {
+  const completionPatterns = [
+    /整理(?:でき|し)(?:ました|た)/,
+    /(?:これで|以上で).*(?:完了|大丈夫|OK)/i,
+    /次(?:に|の(?:ステップ|フェーズ))/,
+    /進(?:みましょう|めましょう)/,
+  ];
+  return completionPatterns.some(pattern => pattern.test(content));
 }
 
 // AIレスポンスから計画ステップを抽出
@@ -120,6 +264,12 @@ export function BrainstormChatContainer({
     setPlanSteps,
     setSubMode: setInternalSubMode,
     restoreState,
+    // 新しいフェーズ進行度管理
+    updatePhaseInfoBatch,
+    showTransitionSuggestion,
+    dismissTransitionSuggestion,
+    acceptTransitionSuggestion,
+    canTransitionToNext,
   } = useBrainstormMode();
 
   // Handle subMode change - update both internal state and notify parent
@@ -164,93 +314,65 @@ export function BrainstormChatContainer({
   }, [state, onMetadataChange, hasRestoredState]);
 
   const [suggestedSteps, setSuggestedSteps] = useState<PlanStep[]>([]);
-  // フェーズ変更通知用の状態
-  const [phaseChangeNotification, setPhaseChangeNotification] = useState<{
-    fromPhase: BrainstormPhase;
-    toPhase: BrainstormPhase;
-  } | null>(null);
 
   // Show save button when we have plan steps or are in task-breakdown phase
   const canSaveProject = state.planSteps.length > 0 || state.currentPhase === "task-breakdown";
   const prevIsLoadingRef = useRef(isLoading);
 
-  // フェーズ変更時に即座に状態を保存（checkPhaseTransitionAndStepsより前に定義）
-  const saveStateImmediately = useCallback((newPhase: BrainstormPhase) => {
-    if (onMetadataChange) {
-      // デバウンスをスキップして即座に保存
-      if (metadataTimeoutRef.current) {
-        clearTimeout(metadataTimeoutRef.current);
-      }
-      const targetIndex = BRAINSTORM_PHASES.indexOf(newPhase);
-
-      // 完了フェーズを計算
-      const phasesToComplete = BRAINSTORM_PHASES.slice(0, targetIndex);
-      const updatedState: BrainstormModeState = {
-        ...state,
-        currentPhase: newPhase,
-        completedPhases: phasesToComplete,
-      };
-      onMetadataChange({ brainstormState: updatedState });
-    }
-  }, [onMetadataChange, state]);
-
-  // AIレスポンスから適切なフェーズを検出し、自動で遷移（企画書モードのみ）
+  // AIレスポンスから情報を抽出し、遷移提案を表示（自動遷移はしない）
   const checkPhaseTransitionAndSteps = useCallback((content: string) => {
-    // カジュアルモードではフェーズ検出を行わない
+    // カジュアルモードでは処理しない
     if (state.subMode === "casual") return;
 
-    // 会話内容から適切なフェーズを検出
-    const detectedPhase = detectAppropriatePhase(content);
+    // 現在のフェーズから情報を抽出
+    const extractedInfo = extractPhaseInfoFromResponse(content, state.currentPhase);
 
-    // 「完了ですね」を検出した場合、または検出されたフェーズが現在と異なる場合
-    const phaseCompletionMatch = content.match(/([言語化|ペルソナ|市場検証|技術検証|インパクト|MVP定義|タスク分解]+)(?:フェーズ)?(?:は|が)?完了/);
-    const hasCompletionKeyword = phaseCompletionMatch !== null;
-
-    // 検出されたフェーズが現在と異なる場合は自動で変更
-    if (detectedPhase && detectedPhase !== state.currentPhase) {
-      const currentIndex = BRAINSTORM_PHASES.indexOf(state.currentPhase);
-      const targetIndex = BRAINSTORM_PHASES.indexOf(detectedPhase);
-
-      // フェーズ変更通知を設定
-      setPhaseChangeNotification({
-        fromPhase: state.currentPhase,
-        toPhase: detectedPhase,
-      });
-
-      // 前進（スキップ含む）または後退のどちらも許可
-      if (targetIndex > currentIndex) {
-        // 前進: skipToPhase を使用
-        skipToPhase(detectedPhase);
-      } else {
-        // 後退: goToPhase を使用
-        goToPhase(detectedPhase);
-      }
-      saveStateImmediately(detectedPhase);
-
-      // 5秒後に通知を自動で消す
-      setTimeout(() => setPhaseChangeNotification(null), 5000);
+    // 抽出した情報があれば、フェーズの進行度を更新
+    const nonNullInfo = Object.fromEntries(
+      Object.entries(extractedInfo).filter(([, v]) => v !== null)
+    );
+    if (Object.keys(nonNullInfo).length > 0) {
+      updatePhaseInfoBatch(state.currentPhase, extractedInfo);
     }
-    // フェーズは変わらないが完了キーワードがある場合、次のフェーズへの移行を提案
-    else if (hasCompletionKeyword) {
-      const currentIndex = BRAINSTORM_PHASES.indexOf(state.currentPhase);
-      const nextPhase = BRAINSTORM_PHASES[currentIndex + 1];
-      if (nextPhase) {
-        setPhaseChangeNotification({
-          fromPhase: state.currentPhase,
-          toPhase: nextPhase,
-        });
-        // この場合は自動で消さない（ユーザーの操作を待つ）
+
+    // 完了意図を検出した場合、遷移提案を表示
+    const hasCompletionIntent = detectCompletionIntent(content);
+    const currentIndex = BRAINSTORM_PHASES.indexOf(state.currentPhase);
+    const nextPhase = BRAINSTORM_PHASES[currentIndex + 1];
+
+    // 遷移提案の表示条件:
+    // 1. 完了意図があり、次のフェーズが存在する場合
+    // 2. または、充足度が閾値を超えている場合
+    if (nextPhase && (hasCompletionIntent || canTransitionToNext())) {
+      const criteria = getPhaseCompletionCriteria(state.currentPhase);
+      const progress = state.phaseProgress[state.currentPhase];
+
+      // すでに遷移提案が表示されていない場合のみ表示
+      if (!state.transitionSuggestion.isVisible) {
+        const reason = hasCompletionIntent
+          ? `${PHASE_INFO[state.currentPhase].title}の内容が整理されました`
+          : `${PHASE_INFO[state.currentPhase].title}の充足度が${progress.completionScore}%に達しました`;
+
+        showTransitionSuggestion(nextPhase, reason);
       }
     }
 
     // タスク分解フェーズで計画ステップを抽出
-    if (state.currentPhase === "task-breakdown" || detectedPhase === "task-breakdown") {
+    if (state.currentPhase === "task-breakdown") {
       const steps = extractPlanSteps(content);
       if (steps.length > 0) {
         setSuggestedSteps(steps);
       }
     }
-  }, [state.subMode, state.currentPhase, skipToPhase, goToPhase, saveStateImmediately]);
+  }, [
+    state.subMode,
+    state.currentPhase,
+    state.phaseProgress,
+    state.transitionSuggestion.isVisible,
+    updatePhaseInfoBatch,
+    showTransitionSuggestion,
+    canTransitionToNext,
+  ]);
 
   // ストリーミング終了時にフェーズ移行を検出（メイン検出ロジック）
   useEffect(() => {
@@ -274,28 +396,22 @@ export function BrainstormChatContainer({
   // フェーズを直接スキップして移動
   const handlePhaseSkip = useCallback((targetPhase: BrainstormPhase) => {
     skipToPhase(targetPhase);
-    saveStateImmediately(targetPhase);
     sendPhaseGuidanceMessage(targetPhase);
-  }, [skipToPhase, saveStateImmediately, sendPhaseGuidanceMessage]);
+  }, [skipToPhase, sendPhaseGuidanceMessage]);
 
-  // 通知から次のフェーズへ進む
-  const handleAcceptPhaseFromNotification = useCallback(() => {
-    if (phaseChangeNotification) {
-      const { toPhase } = phaseChangeNotification;
-      // まだ遷移していない場合のみ（完了キーワード検出時）
-      if (state.currentPhase !== toPhase) {
-        skipToPhase(toPhase);
-        saveStateImmediately(toPhase);
-        sendPhaseGuidanceMessage(toPhase);
-      }
-      setPhaseChangeNotification(null);
+  // 遷移提案を承認して次のフェーズへ進む
+  const handleAcceptTransition = useCallback(() => {
+    if (state.transitionSuggestion.targetPhase) {
+      const targetPhase = state.transitionSuggestion.targetPhase;
+      acceptTransitionSuggestion();
+      sendPhaseGuidanceMessage(targetPhase);
     }
-  }, [phaseChangeNotification, state.currentPhase, skipToPhase, saveStateImmediately, sendPhaseGuidanceMessage]);
+  }, [state.transitionSuggestion.targetPhase, acceptTransitionSuggestion, sendPhaseGuidanceMessage]);
 
-  // 通知を閉じる
-  const handleDismissNotification = useCallback(() => {
-    setPhaseChangeNotification(null);
-  }, []);
+  // 遷移提案を閉じる
+  const handleDismissTransition = useCallback(() => {
+    dismissTransitionSuggestion();
+  }, [dismissTransitionSuggestion]);
 
   // クイックリプライを選択
   const handleQuickReply = useCallback(
@@ -495,15 +611,16 @@ export function BrainstormChatContainer({
               );
             })}
 
-            {/* Phase Change Notification */}
-            {phaseChangeNotification && (
+            {/* Transition Suggestion UI */}
+            {state.transitionSuggestion.isVisible && state.transitionSuggestion.targetPhase && (
               <div className="px-4 py-3">
-                <PhaseChangeNotification
-                  fromPhase={phaseChangeNotification.fromPhase}
-                  toPhase={phaseChangeNotification.toPhase}
-                  isAlreadyChanged={state.currentPhase === phaseChangeNotification.toPhase}
-                  onAccept={handleAcceptPhaseFromNotification}
-                  onDismiss={handleDismissNotification}
+                <TransitionSuggestionUI
+                  currentPhase={state.currentPhase}
+                  targetPhase={state.transitionSuggestion.targetPhase}
+                  reason={state.transitionSuggestion.reason}
+                  completionScore={state.phaseProgress[state.currentPhase].completionScore}
+                  onAccept={handleAcceptTransition}
+                  onDismiss={handleDismissTransition}
                 />
               </div>
             )}
@@ -821,67 +938,86 @@ function SubModeToggle({
   );
 }
 
-// Phase Change Notification
-function PhaseChangeNotification({
-  fromPhase,
-  toPhase,
-  isAlreadyChanged,
+// Transition Suggestion UI - 遷移提案（suggestポリシー）
+function TransitionSuggestionUI({
+  currentPhase,
+  targetPhase,
+  reason,
+  completionScore,
   onAccept,
   onDismiss,
 }: {
-  fromPhase: BrainstormPhase;
-  toPhase: BrainstormPhase;
-  isAlreadyChanged: boolean;
+  currentPhase: BrainstormPhase;
+  targetPhase: BrainstormPhase;
+  reason: string | null;
+  completionScore: number;
   onAccept: () => void;
   onDismiss: () => void;
 }) {
-  const fromInfo = PHASE_INFO[fromPhase];
-  const toInfo = PHASE_INFO[toPhase];
+  const currentInfo = PHASE_INFO[currentPhase];
+  const targetInfo = PHASE_INFO[targetPhase];
 
   return (
-    <div className="animate-in slide-in-from-bottom-2 duration-300 p-3 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+    <div className="animate-in slide-in-from-bottom-2 duration-300 p-4 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+      {/* Progress Bar */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">
+            {currentInfo.title}の進捗
+          </span>
+          <span className="text-xs font-medium text-purple-400">
+            {completionScore}%
+          </span>
+        </div>
+        <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+            style={{ width: `${completionScore}%` }}
+          />
+        </div>
+      </div>
+
       <div className="flex items-center gap-3">
         {/* Icon */}
         <div className="flex items-center gap-1 shrink-0">
-          <span className="material-symbols-outlined text-green-400 text-lg">check_circle</span>
+          <div className="size-8 rounded-full bg-green-500/20 flex items-center justify-center">
+            <span className="material-symbols-outlined text-green-400 text-base">check</span>
+          </div>
           <span className="material-symbols-outlined text-purple-400 text-sm">arrow_forward</span>
           <div className="size-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-            <span className="material-symbols-outlined text-purple-400 text-base">{toInfo.icon}</span>
+            <span className="material-symbols-outlined text-purple-400 text-base">{targetInfo.icon}</span>
           </div>
         </div>
 
         {/* Text */}
         <div className="flex-1 min-w-0">
-          {isAlreadyChanged ? (
-            <p className="text-sm">
-              <span className="font-medium text-green-400">{fromInfo.title}</span>
-              <span className="text-muted-foreground"> → </span>
-              <span className="font-medium text-purple-400">{toInfo.title}</span>
-              <span className="text-muted-foreground"> に移動しました</span>
-            </p>
-          ) : (
-            <p className="text-sm">
-              <span className="font-medium text-green-400">{fromInfo.title}</span>
-              <span className="text-muted-foreground"> 完了。</span>
-              <span className="font-medium text-purple-400">{toInfo.title}</span>
-              <span className="text-muted-foreground"> に進みますか？</span>
+          <p className="text-sm font-medium">
+            <span className="text-purple-400">{targetInfo.title}</span>
+            <span className="text-foreground">に進めます</span>
+          </p>
+          {reason && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {reason}
             </p>
           )}
+          <p className="text-xs text-muted-foreground mt-1">
+            まだこのステップで話し合いたい場合は、そのまま会話を続けてください
+          </p>
         </div>
 
         {/* Buttons */}
         <div className="flex items-center gap-2 shrink-0">
-          {!isAlreadyChanged && (
-            <button
-              onClick={onAccept}
-              className="px-3 py-1.5 text-sm font-medium rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-colors"
-            >
-              進む
-            </button>
-          )}
+          <button
+            onClick={onAccept}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-colors flex items-center gap-1"
+          >
+            <span>次へ進む</span>
+            <span className="material-symbols-outlined text-base">arrow_forward</span>
+          </button>
           <button
             onClick={onDismiss}
-            className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/50 transition-colors"
+            className="p-2 rounded-lg text-muted-foreground hover:bg-muted/50 transition-colors"
+            title="このまま続ける"
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>

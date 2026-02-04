@@ -343,6 +343,59 @@ export interface PlanStep {
 }
 
 // ===========================================
+// Phase Progress Tracking (ステップ遷移管理)
+// ===========================================
+
+/**
+ * 各フェーズで収集すべき情報とその充足状態
+ */
+export interface PhaseProgress {
+  phase: BrainstormPhase;
+  /** 収集した情報（キーと値のペア） */
+  collectedInfo: Record<string, string | null>;
+  /** 充足度スコア (0-100) */
+  completionScore: number;
+  /** ユーザーが明示的に「次へ進む」を押したか */
+  isUserConfirmed: boolean;
+  /** 最終更新日時 */
+  lastUpdated: string;
+}
+
+/**
+ * フェーズ完了条件の定義
+ */
+export interface PhaseCompletionCriteria {
+  phase: BrainstormPhase;
+  /** 必須フィールド（これが埋まらないと進めない） */
+  requiredFields: string[];
+  /** 任意フィールド（あると良い） */
+  optionalFields: string[];
+  /** 最低完了スコア (0-100) */
+  minCompletionScore: number;
+}
+
+/**
+ * フェーズ遷移ポリシー
+ */
+export type PhaseTransitionPolicy =
+  | "manual"           // ユーザーが明示的に「次へ」を押すまで移動しない
+  | "suggest"          // 条件満たしたら提案するが自動移動しない
+  | "auto_with_confirm" // 条件満たしたら確認ダイアログ
+  | "auto";            // 自動移動（非推奨）
+
+/**
+ * 遷移提案の状態
+ */
+export interface TransitionSuggestion {
+  /** 提案が表示されているか */
+  isVisible: boolean;
+  /** 提案先のフェーズ */
+  targetPhase: BrainstormPhase | null;
+  /** 提案理由 */
+  reason: string | null;
+}
+
+// ===========================================
 // Insight & Learning System
 // ===========================================
 
@@ -399,6 +452,12 @@ export interface BrainstormModeState {
   mvpFeatures: string[];
   planSteps: PlanStep[];
   insights: string[];
+  /** フェーズごとの進行度（新機能） */
+  phaseProgress: Record<BrainstormPhase, PhaseProgress>;
+  /** 遷移ポリシー */
+  transitionPolicy: PhaseTransitionPolicy;
+  /** 遷移提案の状態 */
+  transitionSuggestion: TransitionSuggestion;
 }
 
 // ===========================================
@@ -581,7 +640,7 @@ export interface UnlockQuizOption {
 export interface StructuredQuiz {
   /** 現在の質問番号（1から始まる） */
   level: number;
-  /** このアーティファクトの総質問数（1〜3） */
+  /** このアーティファクトの総質問数（コードの複雑さに応じて1〜7問以上） */
   totalQuestions?: number;
   question: string;
   options: UnlockQuizOption[];

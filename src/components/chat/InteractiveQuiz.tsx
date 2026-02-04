@@ -12,23 +12,18 @@ interface InteractiveQuizProps {
 
 export function InteractiveQuiz({ quiz, onSubmit, disabled = false }: InteractiveQuizProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const allAnswered = useMemo(() => {
-    return quiz.questions.every((q) => answers[q.id]?.trim());
-  }, [quiz.questions, answers]);
+  const totalCount = quiz.questions.length;
+  const currentQuestion = quiz.questions[currentIndex];
+  const isLastQuestion = currentIndex === totalCount - 1;
 
-  const handleAnswerChange = useCallback((questionId: string, value: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-  }, []);
-
-  const handleSubmit = useCallback(() => {
-    if (!allAnswered || disabled) return;
-
-    // Format the answer combining all responses
+  // Format all answers and submit
+  const submitAllAnswers = useCallback((finalAnswers: Record<string, string>) => {
     const formattedParts: string[] = [];
 
     for (const question of quiz.questions) {
-      const answer = answers[question.id];
+      const answer = finalAnswers[question.id];
       if (question.type === "choice") {
         formattedParts.push(answer);
       } else if (question.type === "fill") {
@@ -39,10 +34,49 @@ export function InteractiveQuiz({ quiz, onSubmit, disabled = false }: Interactiv
     }
 
     onSubmit(formattedParts.join("\n"));
-  }, [allAnswered, disabled, quiz.questions, answers, onSubmit]);
+  }, [quiz.questions, onSubmit]);
 
-  const answeredCount = Object.values(answers).filter((a) => a?.trim()).length;
-  const totalCount = quiz.questions.length;
+  // Handle answer and auto-advance
+  const handleAnswerChange = useCallback((questionId: string, value: string, autoAdvance: boolean = false) => {
+    const newAnswers = { ...answers, [questionId]: value };
+    setAnswers(newAnswers);
+
+    if (autoAdvance && value.trim()) {
+      if (isLastQuestion) {
+        // Last question - submit immediately
+        submitAllAnswers(newAnswers);
+      } else {
+        // Move to next question
+        setCurrentIndex((prev) => prev + 1);
+      }
+    }
+  }, [answers, isLastQuestion, submitAllAnswers]);
+
+  // Handle Enter key for fill/text types
+  const handleEnterSubmit = useCallback((questionId: string, value: string) => {
+    if (!value.trim()) return;
+
+    const newAnswers = { ...answers, [questionId]: value };
+    setAnswers(newAnswers);
+
+    if (isLastQuestion) {
+      submitAllAnswers(newAnswers);
+    } else {
+      setCurrentIndex((prev) => prev + 1);
+    }
+  }, [answers, isLastQuestion, submitAllAnswers]);
+
+  // Go back to previous question
+  const handleGoBack = useCallback(() => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+    }
+  }, [currentIndex]);
+
+  // Count answered questions for progress
+  const answeredCount = useMemo(() => {
+    return Object.values(answers).filter((a) => a?.trim()).length;
+  }, [answers]);
 
   return (
     <div className="mt-4 space-y-4">
@@ -50,51 +84,61 @@ export function InteractiveQuiz({ quiz, onSubmit, disabled = false }: Interactiv
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span className="material-symbols-outlined text-lg text-primary">edit_note</span>
         <span>
-          {disabled ? "回答済み" : `${answeredCount}/${totalCount} 回答中`}
+          {disabled ? "回答済み" : `${currentIndex + 1}/${totalCount}`}
         </span>
-        {!disabled && (
+        {!disabled && totalCount > 1 && (
           <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${(answeredCount / totalCount) * 100}%` }}
+              style={{ width: `${((currentIndex + 1) / totalCount) * 100}%` }}
             />
           </div>
         )}
       </div>
 
-      {/* Questions */}
-      <div className="space-y-4">
-        {quiz.questions.map((question, index) => (
+      {/* Current Question */}
+      {!disabled && currentQuestion && (
+        <div className="space-y-4">
           <QuestionInput
-            key={question.id}
-            question={question}
-            index={index}
-            value={answers[question.id] || ""}
-            onChange={(value) => handleAnswerChange(question.id, value)}
+            key={currentQuestion.id}
+            question={currentQuestion}
+            index={currentIndex}
+            value={answers[currentQuestion.id] || ""}
+            onChange={(value, autoAdvance) => handleAnswerChange(currentQuestion.id, value, autoAdvance)}
+            onEnterSubmit={(value) => handleEnterSubmit(currentQuestion.id, value)}
             disabled={disabled}
+            isLastQuestion={isLastQuestion}
           />
-        ))}
-      </div>
 
-      {/* Submit button */}
-      {!disabled && (
-        <button
-          onClick={handleSubmit}
-          disabled={!allAnswered}
-          className={cn(
-            "w-full py-3 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2",
-            allAnswered
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground cursor-not-allowed"
+          {/* Back button (only show if not first question) */}
+          {currentIndex > 0 && (
+            <button
+              onClick={handleGoBack}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              前の質問に戻る
+            </button>
           )}
-        >
-          <span className="material-symbols-outlined text-xl">send</span>
-          {allAnswered
-            ? "回答を送信"
-            : totalCount === 1
-              ? "回答を選択してください"
-              : "すべての質問に回答してください"}
-        </button>
+        </div>
+      )}
+
+      {/* Show all answers when disabled (already submitted) */}
+      {disabled && (
+        <div className="space-y-4">
+          {quiz.questions.map((question, index) => (
+            <QuestionInput
+              key={question.id}
+              question={question}
+              index={index}
+              value={answers[question.id] || ""}
+              onChange={() => {}}
+              onEnterSubmit={() => {}}
+              disabled={true}
+              isLastQuestion={false}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -104,11 +148,13 @@ interface QuestionInputProps {
   question: InteractiveQuestion;
   index: number;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, autoAdvance?: boolean) => void;
+  onEnterSubmit: (value: string) => void;
   disabled: boolean;
+  isLastQuestion: boolean;
 }
 
-function QuestionInput({ question, index, value, onChange, disabled }: QuestionInputProps) {
+function QuestionInput({ question, index, value, onChange, onEnterSubmit, disabled, isLastQuestion }: QuestionInputProps) {
   switch (question.type) {
     case "choice":
       return (
@@ -117,7 +163,9 @@ function QuestionInput({ question, index, value, onChange, disabled }: QuestionI
           index={index}
           value={value}
           onChange={onChange}
+          onEnterSubmit={onEnterSubmit}
           disabled={disabled}
+          isLastQuestion={isLastQuestion}
         />
       );
     case "fill":
@@ -127,7 +175,9 @@ function QuestionInput({ question, index, value, onChange, disabled }: QuestionI
           index={index}
           value={value}
           onChange={onChange}
+          onEnterSubmit={onEnterSubmit}
           disabled={disabled}
+          isLastQuestion={isLastQuestion}
         />
       );
     case "text":
@@ -137,7 +187,9 @@ function QuestionInput({ question, index, value, onChange, disabled }: QuestionI
           index={index}
           value={value}
           onChange={onChange}
+          onEnterSubmit={onEnterSubmit}
           disabled={disabled}
+          isLastQuestion={isLastQuestion}
         />
       );
     default:
@@ -151,6 +203,7 @@ function ChoiceQuestion({
   value,
   onChange,
   disabled,
+  isLastQuestion,
 }: QuestionInputProps) {
   return (
     <div className="space-y-2">
@@ -162,11 +215,12 @@ function ChoiceQuestion({
       </div>
       <div className="grid gap-2">
         {question.options?.map((option) => {
-          const isSelected = value === `${option.label}) ${option.text}`;
+          const optionValue = `${option.label}) ${option.text}`;
+          const isSelected = value === optionValue;
           return (
             <button
               key={option.label}
-              onClick={() => onChange(`${option.label}) ${option.text}`)}
+              onClick={() => onChange(optionValue, true)} // autoAdvance=true for choice
               disabled={disabled}
               className={cn(
                 "w-full text-left p-3 rounded-lg border transition-all",
@@ -205,8 +259,17 @@ function FillQuestion({
   index,
   value,
   onChange,
+  onEnterSubmit,
   disabled,
+  isLastQuestion,
 }: QuestionInputProps) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing && value.trim()) {
+      e.preventDefault();
+      onEnterSubmit(value);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -223,7 +286,8 @@ function FillQuestion({
           <input
             type="text"
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(e.target.value, false)}
+            onKeyDown={handleKeyDown}
             disabled={disabled}
             placeholder={question.placeholder || "????"}
             className={cn(
@@ -238,6 +302,11 @@ function FillQuestion({
           )}
         </div>
       </div>
+      {!disabled && value.trim() && (
+        <p className="text-xs text-muted-foreground">
+          Enterキーで{isLastQuestion ? "送信" : "次へ"}
+        </p>
+      )}
     </div>
   );
 }
@@ -247,8 +316,18 @@ function TextQuestion({
   index,
   value,
   onChange,
+  onEnterSubmit,
   disabled,
+  isLastQuestion,
 }: QuestionInputProps) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter without Shift = submit, Shift+Enter = new line
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && value.trim()) {
+      e.preventDefault();
+      onEnterSubmit(value);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -259,7 +338,8 @@ function TextQuestion({
       </div>
       <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value, false)}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder="回答を入力..."
         rows={2}
@@ -270,6 +350,11 @@ function TextQuestion({
           disabled && "opacity-60 cursor-not-allowed"
         )}
       />
+      {!disabled && value.trim() && (
+        <p className="text-xs text-muted-foreground">
+          Enterキーで{isLastQuestion ? "送信" : "次へ"}（Shift+Enterで改行）
+        </p>
+      )}
     </div>
   );
 }
