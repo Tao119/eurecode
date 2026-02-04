@@ -1,7 +1,10 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function TermsPage() {
+  const router = useRouter();
   return (
     <Card className="w-full max-w-3xl">
       <CardHeader>
@@ -98,9 +101,12 @@ export default function TermsPage() {
         </section>
 
         <div className="pt-6 border-t border-border">
-          <Link href="/login" className="text-primary hover:underline text-sm">
-            ← ログインページに戻る
-          </Link>
+          <button
+            onClick={() => router.back()}
+            className="text-primary hover:underline text-sm"
+          >
+            ← 戻る
+          </button>
         </div>
       </CardContent>
     </Card>
