@@ -7,6 +7,7 @@ import { ProjectSelector } from "@/components/chat/ProjectSelector";
 import type { ClaudeModel } from "@/types/chat";
 import { DEFAULT_MODEL } from "@/types/chat";
 import { useChat, ChatApiError } from "@/hooks/useChat";
+import { useCredits } from "@/hooks/useCredits";
 import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
 import { toast } from "sonner";
 import type { PersistedGenerationState } from "@/hooks/useGenerationMode";
@@ -34,6 +35,17 @@ export default function GenerationModePage() {
 
   // Model selection state
   const [selectedModel, setSelectedModel] = useState<ClaudeModel>(DEFAULT_MODEL);
+
+  // Credit state for real-time updates
+  const { updateBalance } = useCredits();
+
+  // Handler for real-time point consumption updates
+  const handlePointsConsumed = useCallback((info: { remainingPoints: number; lowBalanceWarning?: boolean }) => {
+    updateBalance(info.remainingPoints);
+    if (info.lowBalanceWarning) {
+      toast.warning("ポイント残高が少なくなっています", { duration: 3000 });
+    }
+  }, [updateBalance]);
 
   // Update URL without navigation when a new conversation is created
   const handleConversationCreated = useCallback((id: string) => {
@@ -71,6 +83,7 @@ export default function GenerationModePage() {
     projectId: selectedProjectId || undefined,
     onError: handleError,
     onConversationCreated: handleConversationCreated,
+    onPointsConsumed: handlePointsConsumed,
     model: selectedModel,
   });
 

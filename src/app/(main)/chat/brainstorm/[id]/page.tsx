@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useCallback } from "react";
 import { BrainstormChatContainer } from "@/components/chat/BrainstormChatContainer";
 import { useChat } from "@/hooks/useChat";
+import { useCredits } from "@/hooks/useCredits";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
 
@@ -14,6 +15,17 @@ export default function BrainstormRoomPage({ params }: PageProps) {
   const { id: conversationId } = use(params);
   // SubMode state for API calls (synced from BrainstormChatContainer)
   const [subMode, setSubMode] = useState<BrainstormSubMode>("casual");
+
+  // Credit state for real-time updates
+  const { updateBalance } = useCredits();
+
+  // Handler for real-time point consumption updates
+  const handlePointsConsumed = useCallback((info: { remainingPoints: number; lowBalanceWarning?: boolean }) => {
+    updateBalance(info.remainingPoints);
+    if (info.lowBalanceWarning) {
+      toast.warning("ポイント残高が少なくなっています", { duration: 3000 });
+    }
+  }, [updateBalance]);
 
   // Handle errors
   const handleError = useCallback((error: Error) => {
@@ -41,6 +53,7 @@ export default function BrainstormRoomPage({ params }: PageProps) {
     conversationId,
     brainstormSubMode: subMode,
     onError: handleError,
+    onPointsConsumed: handlePointsConsumed,
   });
 
   // Handle metadata changes from BrainstormChatContainer

@@ -56,7 +56,9 @@ interface UseCreditReturn extends CreditState {
   /** クレジット情報を再取得 */
   refresh: () => Promise<void>;
   /** 会話後にポイントを消費（ローカル更新） */
-  consumePoints: (model: AIModel) => void;
+  consumePoints: (pointsUsed: number) => void;
+  /** 残高を直接更新（API応答から） */
+  updateBalance: (newBalance: number) => void;
   /** ポイント不足でブロックされたか */
   isBlocked: boolean;
   /** モデルが利用可能か確認 */
@@ -135,13 +137,15 @@ export function useCredits(): UseCreditReturn {
     fetchCredits();
   }, [fetchCredits]);
 
-  const consumePoints = useCallback((model: AIModel) => {
-    const cost = MODEL_CONSUMPTION_RATE[model];
-
+  /**
+   * ポイントを消費（ローカル状態を即時更新）
+   * @param pointsUsed - 実際に消費したポイント数（段階的消費に対応）
+   */
+  const consumePoints = useCallback((pointsUsed: number) => {
     setState((prev) => {
       // 割り当てポイントがある場合（組織メンバー）
       if (prev.allocated) {
-        const newAllocatedUsed = prev.allocated.used + cost;
+        const newAllocatedUsed = prev.allocated.used + pointsUsed;
         const newAllocatedRemaining = Math.max(0, prev.allocated.total - newAllocatedUsed);
 
         return {
@@ -162,7 +166,7 @@ export function useCredits(): UseCreditReturn {
       }
 
       // プランポイントを優先消費
-      let remainingCost = cost;
+      let remainingCost = pointsUsed;
       let newMonthlyUsed = prev.monthly.used;
       let newPurchasedUsed = prev.purchased.used;
 
@@ -204,6 +208,77 @@ export function useCredits(): UseCreditReturn {
     });
   }, []);
 
+  /**
+   * 残高を直接更新（APIから返された値で上書き）
+   * @param newBalance - 新しい総残高
+   */
+  const updateBalance = useCallback((newBalance: number) => {
+    setState((prev) => {
+      // 差分から使用量を逆算
+      const consumed = prev.totalRemaining - newBalance;
+
+      // 割り当てポイントがある場合（組織メンバー）
+      if (prev.allocated) {
+        return {
+          ...prev,
+          allocated: {
+            ...prev.allocated,
+            used: prev.allocated.total - newBalance,
+            remaining: newBalance,
+          },
+          totalRemaining: newBalance,
+          remainingConversations: {
+            sonnet: Math.floor(newBalance / MODEL_CONSUMPTION_RATE.sonnet),
+            opus: Math.floor(newBalance / MODEL_CONSUMPTION_RATE.opus),
+          },
+          canStartConversation: newBalance >= MODEL_CONSUMPTION_RATE.sonnet,
+          lowBalanceWarning: newBalance < 5,
+        };
+      }
+
+      // プランポイントを優先消費（差分を計算）
+      let remainingCost = consumed > 0 ? consumed : 0;
+      let newMonthlyUsed = prev.monthly.used;
+      let newPurchasedUsed = prev.purchased.used;
+
+      if (consumed > 0) {
+        const monthlyAvailable = prev.monthly.remaining;
+        if (monthlyAvailable > 0) {
+          const fromMonthly = Math.min(remainingCost, monthlyAvailable);
+          newMonthlyUsed += fromMonthly;
+          remainingCost -= fromMonthly;
+        }
+        if (remainingCost > 0) {
+          newPurchasedUsed += remainingCost;
+        }
+      }
+
+      const newMonthlyRemaining = Math.max(0, prev.monthly.total - newMonthlyUsed);
+      const newPurchasedRemaining = Math.max(0, prev.purchased.balance - newPurchasedUsed);
+
+      return {
+        ...prev,
+        monthly: {
+          ...prev.monthly,
+          used: newMonthlyUsed,
+          remaining: newMonthlyRemaining,
+        },
+        purchased: {
+          ...prev.purchased,
+          used: newPurchasedUsed,
+          remaining: newPurchasedRemaining,
+        },
+        totalRemaining: newBalance,
+        remainingConversations: {
+          sonnet: Math.floor(newBalance / MODEL_CONSUMPTION_RATE.sonnet),
+          opus: Math.floor(newBalance / MODEL_CONSUMPTION_RATE.opus),
+        },
+        canStartConversation: newBalance >= MODEL_CONSUMPTION_RATE.sonnet,
+        lowBalanceWarning: newBalance < 5,
+      };
+    });
+  }, []);
+
   const canUseModel = useCallback(
     (model: AIModel): boolean => {
       if (!state.availableModels.includes(model)) return false;
@@ -223,6 +298,7 @@ export function useCredits(): UseCreditReturn {
     ...state,
     refresh: fetchCredits,
     consumePoints,
+    updateBalance,
     isBlocked: !state.canStartConversation,
     canUseModel,
     getRemainingForModel,

@@ -30,6 +30,12 @@ export class ChatApiError extends Error {
 
 const EMPTY_MESSAGES: Message[] = [];
 
+interface PointsConsumedInfo {
+  pointsUsed: number;
+  remainingPoints: number;
+  lowBalanceWarning?: boolean;
+}
+
 interface UseChatOptions {
   mode: ChatMode;
   conversationId?: string;
@@ -37,6 +43,8 @@ interface UseChatOptions {
   onError?: (error: Error) => void;
   onConversationCreated?: (id: string) => void;
   onTokensUsed?: (tokens: number) => void;
+  /** ポイント消費時のコールバック（即時更新用） */
+  onPointsConsumed?: (info: PointsConsumedInfo) => void;
   // 壁打ちモードのサブモード（casual/planning）
   brainstormSubMode?: BrainstormSubMode;
   // Claude モデル選択
@@ -96,7 +104,7 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
-export function useChat({ mode, conversationId: initialConversationId, projectId, onError, onConversationCreated, onTokensUsed, brainstormSubMode, model }: UseChatOptions): UseChatReturn {
+export function useChat({ mode, conversationId: initialConversationId, projectId, onError, onConversationCreated, onTokensUsed, onPointsConsumed, brainstormSubMode, model }: UseChatOptions): UseChatReturn {
   const [branchState, setBranchState] = useState<ChatBranchState>(() => {
     const mainBranchId = generateId();
     return {
@@ -600,9 +608,19 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                     return newMessages;
                   });
                 }
-                // Handle done message with tokens used
-                if (parsed.done && parsed.tokensUsed !== undefined) {
-                  onTokensUsed?.(parsed.tokensUsed);
+                // Handle done message with tokens used and points consumed
+                if (parsed.done) {
+                  if (parsed.tokensUsed !== undefined) {
+                    onTokensUsed?.(parsed.tokensUsed);
+                  }
+                  // Notify about points consumed for immediate UI update
+                  if (parsed.pointsUsed !== undefined && parsed.remainingPoints !== undefined) {
+                    onPointsConsumed?.({
+                      pointsUsed: parsed.pointsUsed,
+                      remainingPoints: parsed.remainingPoints,
+                      lowBalanceWarning: parsed.lowBalanceWarning,
+                    });
+                  }
                 }
               } catch (parseErr) {
                 // Re-throw if it's a streaming error (not a JSON parse error)
@@ -637,9 +655,18 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                     return newMessages;
                   });
                 }
-                // Handle done message with tokens used (in case it's in the buffer)
-                if (parsed.done && parsed.tokensUsed !== undefined) {
-                  onTokensUsed?.(parsed.tokensUsed);
+                // Handle done message with tokens used and points consumed (in case it's in the buffer)
+                if (parsed.done) {
+                  if (parsed.tokensUsed !== undefined) {
+                    onTokensUsed?.(parsed.tokensUsed);
+                  }
+                  if (parsed.pointsUsed !== undefined && parsed.remainingPoints !== undefined) {
+                    onPointsConsumed?.({
+                      pointsUsed: parsed.pointsUsed,
+                      remainingPoints: parsed.remainingPoints,
+                      lowBalanceWarning: parsed.lowBalanceWarning,
+                    });
+                  }
                 }
               } catch {
                 // Skip invalid JSON
@@ -844,9 +871,19 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                   return newMessages;
                 });
               }
-              // Handle done message with tokens used
-              if (parsed.done && parsed.tokensUsed !== undefined) {
-                onTokensUsed?.(parsed.tokensUsed);
+              // Handle done message with tokens used and points consumed
+              if (parsed.done) {
+                if (parsed.tokensUsed !== undefined) {
+                  onTokensUsed?.(parsed.tokensUsed);
+                }
+                // ポイント消費情報を即時更新用に通知
+                if (parsed.pointsUsed !== undefined && parsed.remainingPoints !== undefined) {
+                  onPointsConsumed?.({
+                    pointsUsed: parsed.pointsUsed,
+                    remainingPoints: parsed.remainingPoints,
+                    lowBalanceWarning: parsed.lowBalanceWarning,
+                  });
+                }
               }
             } catch (parseErr) {
               // Re-throw if it's a streaming error (not a JSON parse error)
@@ -882,8 +919,18 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                 });
               }
               // Handle done message with tokens used (in case it's in the buffer)
-              if (parsed.done && parsed.tokensUsed !== undefined) {
-                onTokensUsed?.(parsed.tokensUsed);
+              if (parsed.done) {
+                if (parsed.tokensUsed !== undefined) {
+                  onTokensUsed?.(parsed.tokensUsed);
+                }
+                // ポイント消費情報を即時更新用に通知
+                if (parsed.pointsUsed !== undefined && parsed.remainingPoints !== undefined) {
+                  onPointsConsumed?.({
+                    pointsUsed: parsed.pointsUsed,
+                    remainingPoints: parsed.remainingPoints,
+                    lowBalanceWarning: parsed.lowBalanceWarning,
+                  });
+                }
               }
             } catch {
               // Skip invalid JSON
@@ -916,7 +963,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         saveConversation(latestMessages, conversationId);
       }
     }
-  }, [canRegenerate, isLoading, mode, onError, onTokensUsed, setMessages, conversationId, saveConversation, brainstormSubMode]);
+  }, [canRegenerate, isLoading, mode, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode]);
 
   // Set external metadata (e.g., brainstorm state from BrainstormChatContainer)
   const setExternalMetadata = useCallback((metadata: Partial<ConversationMetadata>) => {

@@ -431,12 +431,13 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
             });
           }
 
-          // === Consume points for this conversation ===
+          // === Consume points for this conversation (token-based) ===
           const pointConsumption = await consumePoints(
             userId,
             aiModel,
             currentConversationId || undefined,
-            organizationId
+            organizationId,
+            estimatedTokens // Pass actual token usage for gradual consumption
           );
 
           // Send conversation ID, tokens used, and point info in the done message

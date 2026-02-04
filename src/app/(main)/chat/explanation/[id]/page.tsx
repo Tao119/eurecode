@@ -3,6 +3,7 @@
 import { useEffect, use, useCallback } from "react";
 import { ChatContainer } from "@/components/chat";
 import { useChat } from "@/hooks/useChat";
+import { useCredits } from "@/hooks/useCredits";
 import { toast } from "sonner";
 
 interface PageProps {
@@ -11,6 +12,17 @@ interface PageProps {
 
 export default function ExplanationRoomPage({ params }: PageProps) {
   const { id: conversationId } = use(params);
+
+  // Credit state for real-time updates
+  const { updateBalance } = useCredits();
+
+  // Handler for real-time point consumption updates
+  const handlePointsConsumed = useCallback((info: { remainingPoints: number; lowBalanceWarning?: boolean }) => {
+    updateBalance(info.remainingPoints);
+    if (info.lowBalanceWarning) {
+      toast.warning("ポイント残高が少なくなっています", { duration: 3000 });
+    }
+  }, [updateBalance]);
 
   // Handle errors
   const handleError = useCallback((error: Error) => {
@@ -35,6 +47,7 @@ export default function ExplanationRoomPage({ params }: PageProps) {
     mode: "explanation",
     conversationId,
     onError: handleError,
+    onPointsConsumed: handlePointsConsumed,
   });
 
   // Load conversation on mount (only when conversationId changes)

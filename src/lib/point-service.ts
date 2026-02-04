@@ -211,19 +211,56 @@ export async function canStartConversation(
 }
 
 // ============================================
+// Token-based Point Calculation
+// ============================================
+
+/** 最小消費ポイント */
+const MIN_POINTS = 0.1;
+
+/** ポイント最大時のトークン閾値 */
+const MAX_TOKENS_THRESHOLD = 2000;
+
+/**
+ * トークン使用量からポイント消費量を計算
+ * - 短いレスポンス（少ないトークン）は少ないポイント
+ * - 長いレスポンス（多いトークン）は最大ポイント
+ * - Sonnet max: 1.0pt, Opus max: 1.6pt
+ */
+export function calculatePointsFromTokens(
+  tokensUsed: number,
+  model: AIModel
+): number {
+  const maxPoints = MODEL_CONSUMPTION_RATE[model];
+
+  if (tokensUsed <= 0) return MIN_POINTS;
+
+  // 線形補間: MIN_POINTS → maxPoints（0〜MAX_TOKENS_THRESHOLD）
+  const ratio = Math.min(tokensUsed / MAX_TOKENS_THRESHOLD, 1);
+  const points = MIN_POINTS + (maxPoints - MIN_POINTS) * ratio;
+
+  // 小数点第2位で四捨五入
+  return Math.round(points * 100) / 100;
+}
+
+// ============================================
 // Point Consumption
 // ============================================
 
 /**
  * ポイントを消費（会話完了時に呼び出し）
+ * @param tokensUsed - 実際に使用したトークン数（指定しない場合は最大消費）
  */
 export async function consumePoints(
   userId: string,
   model: AIModel,
   conversationId?: string,
-  organizationId?: string | null
+  organizationId?: string | null,
+  tokensUsed?: number
 ): Promise<ConsumePointsResult> {
-  const cost = MODEL_CONSUMPTION_RATE[model];
+  // トークン数が指定されていれば段階的計算、なければ最大消費
+  const cost = tokensUsed !== undefined
+    ? calculatePointsFromTokens(tokensUsed, model)
+    : MODEL_CONSUMPTION_RATE[model];
 
   // 残高チェック
   const balance = await getPointBalance(userId, organizationId);
