@@ -423,8 +423,8 @@ export async function isModelAccessible(
 
   let availableModels: AIModel[];
 
-  if (user.userType === "member" && user.organization) {
-    // 組織メンバー
+  if ((user.userType === "member" || user.userType === "admin") && user.organization) {
+    // 組織メンバーまたは管理者
     const orgPlan = user.organization.plan;
     availableModels = ORGANIZATION_PLANS[orgPlan].features.availableModels;
   } else if (user.subscription?.individualPlan) {
@@ -464,7 +464,8 @@ export async function getAvailableModels(userId: string): Promise<AIModel[]> {
 
   if (!user) return ["sonnet"];
 
-  if (user.userType === "member" && user.organization) {
+  if ((user.userType === "member" || user.userType === "admin") && user.organization) {
+    // 組織メンバーまたは管理者
     return ORGANIZATION_PLANS[user.organization.plan].features.availableModels;
   }
 
