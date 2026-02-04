@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { BRAINSTORM_PHASES, type BrainstormPhase } from "@/types/chat";
 
@@ -23,10 +23,31 @@ export function BrainstormPhaseIndicator({
 }: BrainstormPhaseIndicatorProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const currentIndex = BRAINSTORM_PHASES.findIndex((p) => p.phase === currentPhase);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!showDropdown) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    // Use both mouse and touch events for mobile
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showDropdown]);
 
   if (compact) {
     return (
-      <div className="relative z-[90]">
+      <div className="relative z-[90]" ref={dropdownRef}>
         {/* Compact Trigger Button */}
         <button
           onClick={(e) => {
@@ -59,10 +80,11 @@ export function BrainstormPhaseIndicator({
         {/* Dropdown */}
         {showDropdown && (
           <>
-            {/* Backdrop - click to close */}
+            {/* Full screen backdrop for closing */}
             <div
-              className="fixed inset-0 z-[100] bg-black/20"
+              className="fixed inset-0 z-[100]"
               onClick={() => setShowDropdown(false)}
+              onTouchStart={() => setShowDropdown(false)}
             />
             {/* Dropdown Menu */}
             <div className="absolute right-0 top-full mt-2 z-[110] w-72 rounded-xl border border-purple-500/30 bg-card shadow-xl overflow-hidden">

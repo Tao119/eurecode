@@ -446,95 +446,95 @@ export function BrainstormChatContainer({
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header - Mobile Optimized */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80 relative z-20">
-        <div className="mx-auto max-w-4xl px-3 sm:px-4 py-2 sm:py-3">
-          {/* Desktop: single row, Mobile: two rows */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            {/* Mode Selector (dropdown with new chat option) */}
+        <div className="mx-auto max-w-4xl px-2 sm:px-4 py-2 sm:py-3">
+          {/* Single row layout */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Left: Mode Selector */}
             <ChatModeSelector currentMode="brainstorm" conversationId={conversationId} />
 
-            {/* Second row for mobile, same row for desktop */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:overflow-visible">
-              {/* Header Extra (Project Selector etc.) */}
-              {headerExtra}
+            {/* Right: Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Header Extra (Project Selector etc.) - Hidden on mobile */}
+              <div className="hidden sm:flex items-center gap-2">
+                {headerExtra}
+              </div>
 
-              {/* Mode Toggle */}
+              {/* Mode Toggle - Compact on mobile */}
               <SubModeToggle
                 currentMode={state.subMode}
                 onModeChange={handleSubModeChange}
                 disabled={isLoading || messages.length > 0}
               />
 
-            {/* Mobile: Phase Button (opens dropdown) - Planning mode only */}
-            {state.subMode === "planning" && (
-              <button
-                onClick={() => setShowPhaseMenu(!showPhaseMenu)}
-                className="sm:hidden flex items-center gap-1.5 px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20"
-              >
-                <span className="material-symbols-outlined text-purple-400 text-base">
-                  {currentPhaseInfo.icon}
-                </span>
-                <span className="text-xs font-medium text-purple-400">
-                  {BRAINSTORM_PHASES.indexOf(state.currentPhase) + 1}/{BRAINSTORM_PHASES.length}
-                </span>
-                <span className="material-symbols-outlined text-purple-400 text-sm">
-                  {showPhaseMenu ? "expand_less" : "expand_more"}
-                </span>
-              </button>
-            )}
+              {/* Phase Button - Planning mode only */}
+              {state.subMode === "planning" && (
+                <>
+                  {/* Mobile: Compact phase button */}
+                  <button
+                    onClick={() => setShowPhaseMenu(!showPhaseMenu)}
+                    className="sm:hidden flex items-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30"
+                  >
+                    <span className="text-xs font-bold text-purple-400">
+                      {BRAINSTORM_PHASES.indexOf(state.currentPhase) + 1}/{BRAINSTORM_PHASES.length}
+                    </span>
+                    <span className="material-symbols-outlined text-purple-400 text-sm">
+                      {showPhaseMenu ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
 
-            {/* Desktop: Phase Indicator (Compact) - Planning mode only */}
-            {state.subMode === "planning" && (
-              <div className="hidden sm:block relative z-30">
-                <BrainstormPhaseIndicator
-                  currentPhase={state.currentPhase}
-                  completedPhases={state.completedPhases}
-                  compact
-                  onPhaseClick={goToPhase}
-                  onPhaseSkip={handlePhaseSkip}
-                  disabled={isLoading}
-                />
-              </div>
-            )}
+                  {/* Desktop: Full phase indicator */}
+                  <div className="hidden sm:block relative z-30">
+                    <BrainstormPhaseIndicator
+                      currentPhase={state.currentPhase}
+                      completedPhases={state.completedPhases}
+                      compact
+                      onPhaseClick={goToPhase}
+                      onPhaseSkip={handlePhaseSkip}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </>
+              )}
 
-            {/* Save Project Button - Icon only on mobile */}
-            {canSaveProject && (
-              <Button
-                size="sm"
-                onClick={() => setShowSaveModal(true)}
-                className="gap-1 px-2 sm:px-3"
-              >
-                <span className="material-symbols-outlined text-base">save</span>
-                <span className="hidden sm:inline">保存</span>
-              </Button>
-            )}
-
-            {/* Branch Selector - Hidden on mobile */}
-            {hasBranches && (
-              <div className="relative hidden md:block shrink-0">
-                <button
-                  onClick={() => setShowBranchSelector(!showBranchSelector)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 transition-colors text-sm font-medium whitespace-nowrap"
+              {/* Save Project Button - Icon only */}
+              {canSaveProject && (
+                <Button
+                  size="sm"
+                  onClick={() => setShowSaveModal(true)}
+                  className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3 p-0"
                 >
-                  <span className="material-symbols-outlined text-base text-orange-400">fork_right</span>
-                  <span className="text-orange-100">{currentBranch?.name || "メイン"}</span>
-                  <span className="material-symbols-outlined text-base text-orange-400">
-                    {showBranchSelector ? "expand_less" : "expand_more"}
-                  </span>
-                </button>
+                  <span className="material-symbols-outlined text-base">save</span>
+                  <span className="hidden sm:inline ml-1">保存</span>
+                </Button>
+              )}
 
-                {showBranchSelector && (
-                  <BranchSelector
-                    branches={branches}
-                    currentBranchId={currentBranchId}
-                    onSelect={(branchId) => {
-                      onSwitchBranch?.(branchId);
-                      setShowBranchSelector(false);
-                    }}
-                    onClose={() => setShowBranchSelector(false)}
-                  />
-                )}
-              </div>
-            )}
+              {/* Branch Selector - Hidden on mobile */}
+              {hasBranches && (
+                <div className="relative hidden md:block shrink-0">
+                  <button
+                    onClick={() => setShowBranchSelector(!showBranchSelector)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 transition-colors text-sm font-medium whitespace-nowrap"
+                  >
+                    <span className="material-symbols-outlined text-base text-orange-400">fork_right</span>
+                    <span className="text-orange-100">{currentBranch?.name || "メイン"}</span>
+                    <span className="material-symbols-outlined text-base text-orange-400">
+                      {showBranchSelector ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
+
+                  {showBranchSelector && (
+                    <BranchSelector
+                      branches={branches}
+                      currentBranchId={currentBranchId}
+                      onSelect={(branchId) => {
+                        onSwitchBranch?.(branchId);
+                        setShowBranchSelector(false);
+                      }}
+                      onClose={() => setShowBranchSelector(false)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -555,23 +555,23 @@ export function BrainstormChatContainer({
             />
           )}
 
-          {/* Progress Bar - Planning mode only */}
+          {/* Progress Bar - Planning mode only (simplified on mobile) */}
           {state.subMode === "planning" && (
-            <div className="mt-2 sm:mt-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-foreground/80 truncate">
-                  <span className="sm:hidden">{currentPhaseInfo.title}</span>
-                  <span className="hidden sm:inline">{currentPhaseInfo.title}: {currentPhaseInfo.description}</span>
-                </span>
-                <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                  {Math.round(progressPercentage)}%
-                </span>
-              </div>
-              <div className="h-1 sm:h-1.5 bg-muted/30 rounded-full overflow-hidden">
+            <div className="mt-2">
+              <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
                   style={{ width: `${progressPercentage}%` }}
                 />
+              </div>
+              {/* Phase title - only on mobile when menu is not shown */}
+              <div className="sm:hidden mt-1 flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground truncate">
+                  {currentPhaseInfo.title}
+                </span>
+                <span className="text-[10px] text-purple-400">
+                  {Math.round(progressPercentage)}%
+                </span>
               </div>
             </div>
           )}
@@ -692,10 +692,11 @@ function MobilePhaseMenu({
 
   return (
     <>
-      {/* Backdrop - click to close */}
+      {/* Full screen backdrop for closing */}
       <div
-        className="fixed inset-0 z-[45] bg-black/20"
+        className="fixed inset-0 z-[45]"
         onClick={onClose}
+        onTouchStart={onClose}
       />
       <div className="relative z-[50] mt-2 p-2 rounded-lg border border-border bg-card shadow-lg">
         <div className="text-xs text-muted-foreground mb-2 px-1">

@@ -398,19 +398,18 @@ export function GenerationChatContainer({
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-2 sm:py-3">
-          {/* Desktop: single row, Mobile: two rows */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <div className="mx-auto max-w-6xl px-2 sm:px-4 py-2 sm:py-3">
+          {/* Single row layout */}
+          <div className="flex items-center justify-between gap-2">
             {/* Mode Selector (dropdown with new chat option) */}
             <ChatModeSelector currentMode="generation" conversationId={conversationId} />
 
-            {/* Second row for mobile, same row for desktop */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:overflow-visible sm:flex-1">
-              {/* Spacer to push other elements to the right (desktop only) */}
-              <div className="hidden sm:block flex-1" />
-
-              {/* Header Extra (Project Selector etc.) */}
-              {headerExtra}
+            {/* Right: Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Header Extra (Project Selector etc.) - Hidden on mobile */}
+              <div className="hidden sm:flex items-center gap-2">
+                {headerExtra}
+              </div>
 
               {/* 設定ポップオーバー */}
               <GenerationOptionsPopover
@@ -420,69 +419,66 @@ export function GenerationChatContainer({
                 canSkip={canSkip}
               />
 
-            {/* 進捗インジケーター（コード生成後のみ表示）- デスクトップのみフル表示 */}
-            {state.generatedCode && (
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:block text-xs text-muted-foreground">
-                  アンロック進捗
+              {/* 進捗インジケーター（コード生成後のみ表示）*/}
+              {state.generatedCode && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-500"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] sm:text-xs font-medium text-yellow-400">
+                    {Math.round(progressPercentage)}%
+                  </div>
                 </div>
-                <div className="w-16 sm:w-24 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-500"
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-                <div className="text-xs font-medium text-yellow-400">
-                  {Math.round(progressPercentage)}%
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Code Panel Toggle - Desktop only */}
-            {hasCodeToShow && (
-              <button
-                onClick={() => setIsCodePanelCollapsed(!isCodePanelCollapsed)}
-                className={cn(
-                  "hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors text-sm",
-                  isCodePanelCollapsed
-                    ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"
-                    : "border-border bg-card hover:bg-muted/50"
-                )}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {isCodePanelCollapsed ? "dock_to_left" : "dock_to_right"}
-                </span>
-                <span>{isCodePanelCollapsed ? "コードを表示" : "コードを非表示"}</span>
-              </button>
-            )}
-
-            {/* Branch Selector - Desktop only */}
-            {hasBranches && (
-              <div className="relative hidden md:block shrink-0">
+              {/* Code Panel Toggle - Desktop only */}
+              {hasCodeToShow && (
                 <button
-                  onClick={() => setShowBranchSelector(!showBranchSelector)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm whitespace-nowrap"
+                  onClick={() => setIsCodePanelCollapsed(!isCodePanelCollapsed)}
+                  className={cn(
+                    "hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors text-sm",
+                    isCodePanelCollapsed
+                      ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"
+                      : "border-border bg-card hover:bg-muted/50"
+                  )}
                 >
-                  <span className="material-symbols-outlined text-base">fork_right</span>
-                  <span>{currentBranch?.name || "メイン"}</span>
                   <span className="material-symbols-outlined text-base">
-                    {showBranchSelector ? "expand_less" : "expand_more"}
+                    {isCodePanelCollapsed ? "dock_to_left" : "dock_to_right"}
                   </span>
+                  <span>{isCodePanelCollapsed ? "コードを表示" : "コードを非表示"}</span>
                 </button>
+              )}
 
-                {showBranchSelector && (
-                  <BranchSelector
-                    branches={branches}
-                    currentBranchId={currentBranchId}
-                    onSelect={(branchId) => {
-                      onSwitchBranch?.(branchId);
-                      setShowBranchSelector(false);
-                    }}
-                    onClose={() => setShowBranchSelector(false)}
-                  />
-                )}
-              </div>
-            )}
+              {/* Branch Selector - Desktop only */}
+              {hasBranches && (
+                <div className="relative hidden md:block shrink-0">
+                  <button
+                    onClick={() => setShowBranchSelector(!showBranchSelector)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm whitespace-nowrap"
+                  >
+                    <span className="material-symbols-outlined text-base">fork_right</span>
+                    <span>{currentBranch?.name || "メイン"}</span>
+                    <span className="material-symbols-outlined text-base">
+                      {showBranchSelector ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
+
+                  {showBranchSelector && (
+                    <BranchSelector
+                      branches={branches}
+                      currentBranchId={currentBranchId}
+                      onSelect={(branchId) => {
+                        onSwitchBranch?.(branchId);
+                        setShowBranchSelector(false);
+                      }}
+                      onClose={() => setShowBranchSelector(false)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

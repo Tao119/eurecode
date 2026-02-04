@@ -58,42 +58,43 @@ export function ChatContainer({
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="mx-auto max-w-4xl px-4 py-3">
-          {/* Desktop: single row, Mobile: two rows */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+        <div className="mx-auto max-w-4xl px-2 sm:px-4 py-2 sm:py-3">
+          {/* Single row layout */}
+          <div className="flex items-center justify-between gap-2">
             {/* Mode Selector (dropdown with new chat option) */}
             <ChatModeSelector currentMode={mode} conversationId={conversationId} />
 
-            {/* Header Extra (Project Selector etc.) */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
+            {/* Right: Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Header Extra (Project Selector etc.) */}
               {headerExtra}
 
-              {/* Branch Selector */}
+              {/* Branch Selector - Hidden on mobile */}
               {hasBranches && (
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setShowBranchSelector(!showBranchSelector)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm whitespace-nowrap"
-                >
-                  <span className="material-symbols-outlined text-base">fork_right</span>
-                  <span>{currentBranch?.name || "メイン"}</span>
-                  <span className="material-symbols-outlined text-base">
-                    {showBranchSelector ? "expand_less" : "expand_more"}
-                  </span>
-                </button>
+                <div className="relative shrink-0 hidden sm:block">
+                  <button
+                    onClick={() => setShowBranchSelector(!showBranchSelector)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm whitespace-nowrap"
+                  >
+                    <span className="material-symbols-outlined text-base">fork_right</span>
+                    <span>{currentBranch?.name || "メイン"}</span>
+                    <span className="material-symbols-outlined text-base">
+                      {showBranchSelector ? "expand_less" : "expand_more"}
+                    </span>
+                  </button>
 
-                {showBranchSelector && (
-                  <BranchSelector
-                    branches={branches}
-                    currentBranchId={currentBranchId}
-                    onSelect={(branchId) => {
-                      onSwitchBranch?.(branchId);
-                      setShowBranchSelector(false);
-                    }}
-                    onClose={() => setShowBranchSelector(false)}
-                  />
-                )}
-              </div>
+                  {showBranchSelector && (
+                    <BranchSelector
+                      branches={branches}
+                      currentBranchId={currentBranchId}
+                      onSelect={(branchId) => {
+                        onSwitchBranch?.(branchId);
+                        setShowBranchSelector(false);
+                      }}
+                      onClose={() => setShowBranchSelector(false)}
+                    />
+                  )}
+                </div>
               )}
             </div>
           </div>

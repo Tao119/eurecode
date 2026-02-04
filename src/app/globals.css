@@ -180,23 +180,20 @@
   }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Hide all scrollbars globally */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 }
 
-::-webkit-scrollbar-track {
-  background: var(--cm-surface-darker);
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--cm-border);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--cm-text-muted);
+/* Prevent horizontal scroll */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* Code Syntax Highlighting (for future use) */
