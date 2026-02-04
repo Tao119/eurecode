@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PricingTable } from "@/components/billing/PricingTable";
 import { CreditAlert, CreditBalanceDisplay } from "@/components/billing/CreditAlert";
 import {
@@ -34,6 +36,12 @@ interface SubscriptionData {
   status: "active" | "canceled" | "past_due";
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  trial?: {
+    isTrialing: boolean;
+    trialEnd: string | null;
+    daysRemaining: number;
+    isPaid: boolean;
+  };
 }
 
 interface CreditBalanceData {
@@ -239,15 +247,25 @@ function BillingPageContent() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>現在のプラン</span>
-                {subscription && subscription.status === "active" && (
-                  <Badge variant="default">アクティブ</Badge>
-                )}
-                {subscription && subscription.status === "past_due" && (
-                  <Badge variant="destructive">支払い遅延</Badge>
-                )}
-                {subscription && subscription.status === "canceled" && (
-                  <Badge variant="secondary">キャンセル済み</Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {subscription?.trial?.isTrialing && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-50">
+                      トライアル中
+                    </Badge>
+                  )}
+                  {subscription && subscription.status === "active" && !subscription.trial?.isTrialing && (
+                    <Badge variant="default">アクティブ</Badge>
+                  )}
+                  {subscription && subscription.status === "active" && subscription.trial?.isTrialing && (
+                    <Badge variant="secondary">アクティブ</Badge>
+                  )}
+                  {subscription && subscription.status === "past_due" && (
+                    <Badge variant="destructive">支払い遅延</Badge>
+                  )}
+                  {subscription && subscription.status === "canceled" && (
+                    <Badge variant="secondary">キャンセル済み</Badge>
+                  )}
+                </div>
               </CardTitle>
               <CardDescription>
                 {subscription?.planType === "organization" ? "組織プラン" : "個人プラン"}
@@ -269,7 +287,32 @@ function BillingPageContent() {
                 </div>
               </div>
 
-              {subscription?.currentPeriodEnd && (
+              {/* Trial Information */}
+              {subscription?.trial?.isTrialing && (
+                <Alert className="border-amber-500 bg-amber-50">
+                  <Zap className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium">無料トライアル期間中</span>
+                        <span className="ml-2">
+                          残り {subscription.trial.daysRemaining} 日
+                        </span>
+                        {subscription.trial.trialEnd && (
+                          <span className="text-xs ml-2">
+                            （{new Date(subscription.trial.trialEnd).toLocaleDateString("ja-JP")} まで）
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm mt-1">
+                      トライアル終了後は自動的にFreeプランに移行します。継続してご利用いただく場合は、下記からプランをアップグレードしてください。
+                    </p>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {subscription?.currentPeriodEnd && !subscription?.trial?.isTrialing && (
                 <p className="text-sm text-muted-foreground">
                   次回更新日: {new Date(subscription.currentPeriodEnd).toLocaleDateString("ja-JP")}
                   {subscription.cancelAtPeriodEnd && (
@@ -520,26 +563,31 @@ function CustomCreditPurchase() {
   };
 
   return (
-    <div className="flex gap-4 items-end">
-      <div className="flex-1">
-        <label className="text-sm text-muted-foreground">金額（円）</label>
-        <input
+    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+      <div className="flex-1 w-full sm:w-auto">
+        <Label htmlFor="custom-amount" className="text-sm text-muted-foreground">
+          金額（円）
+        </Label>
+        <Input
+          id="custom-amount"
           type="number"
           min="300"
           step="100"
           placeholder="¥300〜"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full mt-1 px-3 py-2 border rounded-md"
+          className="mt-1.5"
         />
       </div>
-      <div className="text-center px-4">
-        <p className="text-sm text-muted-foreground">獲得ポイント</p>
-        <p className="text-xl font-bold">{points.toLocaleString()} pt</p>
+      <div className="flex items-center gap-4 sm:gap-4">
+        <div className="text-center px-4 py-2 bg-muted rounded-md">
+          <p className="text-xs text-muted-foreground">獲得ポイント</p>
+          <p className="text-lg font-bold">{points.toLocaleString()} pt</p>
+        </div>
+        <Button onClick={handlePurchase} disabled={!isValid || isLoading} className="shrink-0">
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "購入"}
+        </Button>
       </div>
-      <Button onClick={handlePurchase} disabled={!isValid || isLoading}>
-        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "購入"}
-      </Button>
     </div>
   );
 }

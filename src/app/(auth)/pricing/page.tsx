@@ -208,15 +208,18 @@ function IndividualPlanCard({
   const isPopular = plan.id === "pro";
   const isFree = plan.id === "free";
 
+  // Only show current plan indicator when logged in
+  const showCurrentPlan = isLoggedIn && isCurrentPlan;
+
   return (
-    <Card className={`relative ${isPopular ? "border-primary shadow-lg scale-105" : ""} ${isCurrentPlan ? "ring-2 ring-primary" : ""}`}>
-      {isPopular && (
+    <Card className={`relative ${isPopular ? "border-primary shadow-lg scale-105" : ""} ${showCurrentPlan ? "ring-2 ring-primary" : ""}`}>
+      {isPopular && !showCurrentPlan && (
         <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
           人気
         </Badge>
       )}
-      {isCurrentPlan && (
-        <Badge variant="outline" className="absolute -top-3 right-4">
+      {showCurrentPlan && (
+        <Badge variant="outline" className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
           現在のプラン
         </Badge>
       )}
@@ -255,14 +258,20 @@ function IndividualPlanCard({
         </ul>
       </CardContent>
       <CardFooter>
-        {isCurrentPlan ? (
+        {showCurrentPlan ? (
           <Button variant="outline" className="w-full" disabled>
             利用中
           </Button>
-        ) : isFree ? (
+        ) : isFree && !isLoggedIn ? (
           <Button variant="outline" className="w-full" asChild>
-            <Link href={isLoggedIn ? "/settings/billing" : "/register"}>
-              {isLoggedIn ? "現在のプラン" : "無料で始める"}
+            <Link href="/register">
+              無料で始める
+            </Link>
+          </Button>
+        ) : isFree && isLoggedIn ? (
+          <Button variant="outline" className="w-full" asChild>
+            <Link href="/settings/billing">
+              プランを見る
             </Link>
           </Button>
         ) : (
@@ -294,15 +303,18 @@ function OrganizationPlanCard({
   const isFree = plan.id === "free";
   const isEnterprise = plan.id === "enterprise";
 
+  // Only show current plan indicator when logged in
+  const showCurrentPlan = isLoggedIn && isCurrentPlan;
+
   return (
-    <Card className={`relative ${isPopular ? "border-primary shadow-lg scale-105" : ""} ${isCurrentPlan ? "ring-2 ring-primary" : ""}`}>
-      {isPopular && (
+    <Card className={`relative ${isPopular ? "border-primary shadow-lg scale-105" : ""} ${showCurrentPlan ? "ring-2 ring-primary" : ""}`}>
+      {isPopular && !showCurrentPlan && (
         <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
           おすすめ
         </Badge>
       )}
-      {isCurrentPlan && (
-        <Badge variant="outline" className="absolute -top-3 right-4">
+      {showCurrentPlan && (
+        <Badge variant="outline" className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">
           現在のプラン
         </Badge>
       )}
@@ -343,7 +355,7 @@ function OrganizationPlanCard({
         </ul>
       </CardContent>
       <CardFooter>
-        {isCurrentPlan ? (
+        {showCurrentPlan ? (
           <Button variant="outline" className="w-full" disabled>
             利用中
           </Button>
@@ -351,10 +363,16 @@ function OrganizationPlanCard({
           <Button variant="outline" className="w-full" asChild>
             <Link href="mailto:contact@eurecode.com">お問い合わせ</Link>
           </Button>
-        ) : isFree ? (
+        ) : isFree && !isLoggedIn ? (
           <Button variant="outline" className="w-full" asChild>
-            <Link href={isLoggedIn ? "/settings/billing" : "/register?type=admin"}>
-              {isLoggedIn ? "現在のプラン" : "無料で始める"}
+            <Link href="/register?type=admin">
+              無料で始める
+            </Link>
+          </Button>
+        ) : isFree && isLoggedIn ? (
+          <Button variant="outline" className="w-full" asChild>
+            <Link href="/settings/billing">
+              プランを見る
             </Link>
           </Button>
         ) : (

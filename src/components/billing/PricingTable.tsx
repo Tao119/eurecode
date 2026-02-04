@@ -63,7 +63,7 @@ export function PricingTable({
         window.location.href = data.url;
       } else {
         console.error("Checkout failed:", data.error);
-        alert("決済ページの作成に失敗しました");
+        alert(data.errorJa || "決済ページの作成に失敗しました");
       }
     } catch (error) {
       console.error("Checkout error:", error);

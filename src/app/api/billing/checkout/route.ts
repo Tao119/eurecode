@@ -14,7 +14,10 @@ export async function POST(request: NextRequest) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized", errorJa: "ログインが必要です" },
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
@@ -30,11 +33,17 @@ export async function POST(request: NextRequest) {
     if (isOrganization) {
       const orgPlan = plan as OrganizationPlan;
       if (!ORGANIZATION_PLANS[orgPlan]) {
-        return NextResponse.json({ error: "Invalid organization plan" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid organization plan", errorJa: "無効な組織プランです" },
+          { status: 400 }
+        );
       }
       if (orgPlan === "free" || orgPlan === "enterprise") {
         return NextResponse.json(
-          { error: "This plan cannot be purchased through checkout" },
+          {
+            error: "This plan cannot be purchased through checkout",
+            errorJa: "このプランはチェックアウトでは購入できません",
+          },
           { status: 400 }
         );
       }
@@ -42,11 +51,17 @@ export async function POST(request: NextRequest) {
     } else {
       const indPlan = plan as IndividualPlan;
       if (!INDIVIDUAL_PLANS[indPlan]) {
-        return NextResponse.json({ error: "Invalid individual plan" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid individual plan", errorJa: "無効なプランです" },
+          { status: 400 }
+        );
       }
       if (indPlan === "free") {
         return NextResponse.json(
-          { error: "Free plan does not require checkout" },
+          {
+            error: "Free plan does not require checkout",
+            errorJa: "フリープランでは購入は不要です",
+          },
           { status: 400 }
         );
       }
@@ -54,8 +69,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!priceId) {
+      console.error(`Stripe Price ID not configured for plan: ${plan}, period: ${billingPeriod}, isOrg: ${isOrganization}`);
       return NextResponse.json(
-        { error: "Price not configured for this plan" },
+        {
+          error: "Price not configured for this plan",
+          errorJa: "このプランの価格が設定されていません。管理者にお問い合わせください。",
+        },
         { status: 400 }
       );
     }
@@ -67,7 +86,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "User not found", errorJa: "ユーザーが見つかりません" },
+        { status: 404 }
+      );
     }
 
     // Stripe顧客IDを取得または作成
@@ -100,8 +122,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {
     console.error("Checkout error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to create checkout session" },
+      {
+        error: "Failed to create checkout session",
+        errorJa: `決済セッションの作成に失敗しました: ${errorMessage}`,
+      },
       { status: 500 }
     );
   }

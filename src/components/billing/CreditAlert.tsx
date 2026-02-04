@@ -15,6 +15,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { AlertTriangle, Zap, ArrowRight, CreditCard, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   CreditPack,
   CREDIT_PACKS,
@@ -59,7 +61,6 @@ export function CreditAlert({
   const router = useRouter();
   const [showPurchaseDialog, setShowPurchaseDialog] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   if (!showWarning && remainingConversations > 0) {
     return null;
@@ -221,11 +222,12 @@ function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialogProps)
 
           {/* カスタム金額 */}
           <div className="border-t pt-4">
-            <label className="text-sm text-muted-foreground">
+            <Label htmlFor="custom-credit-amount" className="text-sm text-muted-foreground">
               またはカスタム金額を入力（最低¥300）
-            </label>
-            <div className="flex gap-2 mt-2">
-              <input
+            </Label>
+            <div className="flex gap-2 mt-2 items-center">
+              <Input
+                id="custom-credit-amount"
                 type="number"
                 min="300"
                 step="100"
@@ -235,9 +237,9 @@ function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialogProps)
                   setCustomAmount(e.target.value);
                   setSelectedPack(null);
                 }}
-                className="flex-1 px-3 py-2 border rounded-md"
+                className="flex-1"
               />
-              <span className="flex items-center text-sm text-muted-foreground">
+              <span className="flex items-center text-sm text-muted-foreground whitespace-nowrap px-2 py-1.5 bg-muted rounded">
                 = {customAmount ? Math.floor(parseInt(customAmount, 10) / 3) : 0}pt
               </span>
             </div>
