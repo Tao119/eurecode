@@ -171,7 +171,7 @@ function LoginForm() {
       </CardHeader>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
           <CardContent className="space-y-4">
             {resendSuccess && (
               <div className="p-3 text-sm text-green-600 bg-green-500/10 border border-green-500/20 rounded-md">
