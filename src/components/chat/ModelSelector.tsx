@@ -4,22 +4,25 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { ClaudeModel } from "@/types/chat";
 import { CLAUDE_MODELS, getModelConfig } from "@/types/chat";
-import { MODEL_CONSUMPTION_RATE, MODEL_DISPLAY_NAMES, type AIModel } from "@/config/plans";
+import type { AIModel } from "@/config/plans";
 
 // ClaudeModel から AIModel へのマッピング
 function toAIModel(claudeModel: ClaudeModel): AIModel {
   return claudeModel === "opus" ? "opus" : "sonnet";
 }
 
+// モデルごとの説明文（Opusには消費が早い旨を追加）
+const MODEL_DESCRIPTIONS: Record<ClaudeModel, string> = {
+  opus: "最高性能・複雑な推論に最適（ポイント消費が早い）",
+  sonnet: "バランス型・コーディングに最適",
+  haiku: "高速・軽量タスクに最適",
+};
+
 interface ModelSelectorProps {
   selectedModel: ClaudeModel;
   onModelChange: (model: ClaudeModel) => void;
   /** 利用可能なモデル（プランに基づく） */
   availableModels?: AIModel[];
-  /** 残りポイント */
-  remainingPoints?: number;
-  /** ポイントコストを表示 */
-  showPointCost?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -28,8 +31,6 @@ export function ModelSelector({
   selectedModel,
   onModelChange,
   availableModels = ["sonnet", "opus"],
-  remainingPoints,
-  showPointCost = true,
   disabled = false,
   className,
 }: ModelSelectorProps) {
@@ -37,20 +38,11 @@ export function ModelSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const currentModel = getModelConfig(selectedModel);
-  const currentAIModel = toAIModel(selectedModel);
-  const currentPointCost = MODEL_CONSUMPTION_RATE[currentAIModel];
 
   // モデルが利用可能かチェック
   const isModelAvailable = (model: ClaudeModel): boolean => {
     const aiModel = toAIModel(model);
     return availableModels.includes(aiModel);
-  };
-
-  // 残りポイントで何回会話できるか
-  const getRemainingConversations = (model: ClaudeModel): number | undefined => {
-    if (remainingPoints === undefined) return undefined;
-    const cost = MODEL_CONSUMPTION_RATE[toAIModel(model)];
-    return Math.floor(remainingPoints / cost);
   };
 
   // Close dropdown when clicking outside
@@ -78,13 +70,13 @@ export function ModelSelector({
   };
 
   return (
-    <div ref={dropdownRef} className={cn("relative", className)}>
+    <div ref={dropdownRef} className={cn("relative shrink-0", className)}>
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors",
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
           "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/20",
           disabled && "opacity-50 cursor-not-allowed",
           isOpen && "bg-muted/50"
@@ -94,11 +86,6 @@ export function ModelSelector({
           {currentModel.icon}
         </span>
         <span className="text-sm font-medium">{currentModel.name}</span>
-        {showPointCost && (
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {currentPointCost}pt
-          </span>
-        )}
         <span className="material-symbols-outlined text-sm text-muted-foreground">
           {isOpen ? "expand_less" : "expand_more"}
         </span>
@@ -109,8 +96,6 @@ export function ModelSelector({
           <div className="p-1">
             {CLAUDE_MODELS.filter((m) => m.id !== "haiku").map((model) => {
               const available = isModelAvailable(model.id);
-              const pointCost = MODEL_CONSUMPTION_RATE[toAIModel(model.id)];
-              const remaining = getRemainingConversations(model.id);
 
               return (
                 <button
@@ -147,16 +132,6 @@ export function ModelSelector({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{model.name}</span>
-                      {showPointCost && (
-                        <span className={cn(
-                          "text-xs px-1.5 py-0.5 rounded",
-                          model.id === "opus"
-                            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-                            : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                        )}>
-                          {pointCost}pt
-                        </span>
-                      )}
                       {selectedModel === model.id && (
                         <span className="material-symbols-outlined text-sm text-primary">
                           check
@@ -169,13 +144,8 @@ export function ModelSelector({
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {model.description}
+                      {MODEL_DESCRIPTIONS[model.id]}
                     </p>
-                    {remaining !== undefined && available && (
-                      <p className="text-xs text-muted-foreground/70 mt-0.5">
-                        残り約{remaining}回
-                      </p>
-                    )}
                   </div>
                 </button>
               );

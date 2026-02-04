@@ -331,19 +331,22 @@ export function BrainstormChatContainer({
       {/* Mode Header - Mobile Optimized */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80 relative z-20">
         <div className="mx-auto max-w-4xl px-3 sm:px-4 py-2 sm:py-3">
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Desktop: single row, Mobile: two rows */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             {/* Mode Selector (dropdown with new chat option) */}
             <ChatModeSelector currentMode="brainstorm" conversationId={conversationId} />
 
-            {/* Header Extra (Project Selector etc.) */}
-            {headerExtra}
+            {/* Second row for mobile, same row for desktop */}
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:overflow-visible">
+              {/* Header Extra (Project Selector etc.) */}
+              {headerExtra}
 
-            {/* Mode Toggle */}
-            <SubModeToggle
-              currentMode={state.subMode}
-              onModeChange={handleSubModeChange}
-              disabled={isLoading || messages.length > 0}
-            />
+              {/* Mode Toggle */}
+              <SubModeToggle
+                currentMode={state.subMode}
+                onModeChange={handleSubModeChange}
+                disabled={isLoading || messages.length > 0}
+              />
 
             {/* Mobile: Phase Button (opens dropdown) - Planning mode only */}
             {state.subMode === "planning" && (
@@ -391,10 +394,10 @@ export function BrainstormChatContainer({
 
             {/* Branch Selector - Hidden on mobile */}
             {hasBranches && (
-              <div className="relative hidden md:block">
+              <div className="relative hidden md:block shrink-0">
                 <button
                   onClick={() => setShowBranchSelector(!showBranchSelector)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 transition-colors text-sm font-medium whitespace-nowrap"
                 >
                   <span className="material-symbols-outlined text-base text-orange-400">fork_right</span>
                   <span className="text-orange-100">{currentBranch?.name || "メイン"}</span>
@@ -416,6 +419,7 @@ export function BrainstormChatContainer({
                 )}
               </div>
             )}
+            </div>
           </div>
 
           {/* Mobile Phase Dropdown - Planning mode only */}

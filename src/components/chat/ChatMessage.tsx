@@ -296,34 +296,34 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        "relative flex w-full gap-4 px-4 py-6",
+        "relative flex w-full gap-2.5 sm:gap-4 px-3 sm:px-4 py-4 sm:py-6",
         isUser ? "bg-transparent" : "bg-muted/30"
       )}
     >
       <div className="flex-shrink-0">
         <div
           className={cn(
-            "size-8 rounded-full flex items-center justify-center text-sm font-medium",
+            "size-7 sm:size-8 rounded-full flex items-center justify-center text-sm font-medium",
             isUser
               ? "bg-primary text-primary-foreground"
               : "bg-gradient-to-br from-blue-500 to-purple-600 text-white"
           )}
         >
           {isUser ? (
-            <span className="material-symbols-outlined text-lg">person</span>
+            <span className="material-symbols-outlined text-base sm:text-lg">person</span>
           ) : (
-            <span className="material-symbols-outlined text-lg">smart_toy</span>
+            <span className="material-symbols-outlined text-base sm:text-lg">smart_toy</span>
           )}
         </div>
       </div>
 
       <div ref={messageRef} className="flex-1 min-w-0 space-y-2 relative">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-sm">
+          <span className="font-semibold text-xs sm:text-sm">
             {isUser ? "あなた" : "Eurecode"}
           </span>
           {isStreaming && (
-            <span className="text-xs text-muted-foreground animate-pulse">
+            <span className="text-[10px] sm:text-xs text-muted-foreground animate-pulse">
               入力中...
             </span>
           )}
@@ -386,36 +386,36 @@ export function ChatMessage({
         )}
       </div>
 
-      {/* Action Buttons - always visible, highlight only on button hover */}
+      {/* Action Buttons - Mobile: icon only, Desktop: with labels */}
       {isAssistant && !isStreaming && (
-        <div className="absolute right-4 top-4 flex items-center gap-2">
+        <div className="absolute right-3 sm:right-4 top-3 sm:top-4 flex items-center gap-1 sm:gap-2">
           {/* Save as Learning button */}
           <button
             onClick={handleSaveLearning}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-amber-500/50 hover:text-amber-500 transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-amber-500/50 hover:text-amber-500 active:scale-95 transition-all shadow-sm cursor-pointer"
             title="学びとして保存"
           >
-            <span className="material-symbols-outlined text-base">bookmark_add</span>
-            <span>保存</span>
+            <span className="material-symbols-outlined text-lg sm:text-base">bookmark_add</span>
+            <span className="hidden sm:inline">保存</span>
           </button>
           {showRegenerateButton && onRegenerate && (
             <button
               onClick={onRegenerate}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground active:scale-95 transition-all shadow-sm cursor-pointer"
               title="この回答を再生成"
             >
-              <span className="material-symbols-outlined text-base">refresh</span>
-              <span>再生成</span>
+              <span className="material-symbols-outlined text-lg sm:text-base">refresh</span>
+              <span className="hidden sm:inline">再生成</span>
             </button>
           )}
           {showForkButton && onFork && (
             <button
               onClick={onFork}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground active:scale-95 transition-all shadow-sm cursor-pointer"
               title="この時点から会話を分岐"
             >
-              <span className="material-symbols-outlined text-base">fork_right</span>
-              <span>分岐</span>
+              <span className="material-symbols-outlined text-lg sm:text-base">fork_right</span>
+              <span className="hidden sm:inline">分岐</span>
             </button>
           )}
         </div>
@@ -443,41 +443,44 @@ function OptionButtons({
   const isDisabled = !onSelect;
 
   return (
-    <div className="mt-4 space-y-2">
+    <div className="mt-3 sm:mt-4 space-y-2">
       <div className="flex items-center gap-2 mb-2">
         <span className={cn(
-          "material-symbols-outlined text-lg",
+          "material-symbols-outlined text-base sm:text-lg",
           isDisabled ? "text-muted-foreground" : "text-primary"
         )}>
           {isDisabled ? "check_circle" : "touch_app"}
         </span>
-        <span className="text-sm font-medium text-muted-foreground">
-          {isDisabled ? "回答済み" : "選択肢をクリックして回答"}
+        <span className="text-xs sm:text-sm font-medium text-muted-foreground">
+          {isDisabled ? "回答済み" : "タップして回答"}
         </span>
       </div>
-      <div className="grid gap-2">
+      <div className="grid gap-1.5 sm:gap-2">
         {options.map((option) => (
           <button
             key={option.label}
             onClick={() => onSelect?.(`${option.label}) ${option.text}`)}
             disabled={isDisabled}
             className={cn(
-              "w-full text-left p-3 rounded-lg border transition-all",
+              "w-full text-left p-2.5 sm:p-3 rounded-lg border transition-all",
               isDisabled
                 ? "border-border/50 bg-muted/30 cursor-not-allowed opacity-60"
-                : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 group/option cursor-pointer"
+                : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 active:scale-[0.98] group/option cursor-pointer"
             )}
           >
-            <span className="inline-flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 sm:gap-3">
               <span className={cn(
-                "flex-shrink-0 size-7 rounded-full font-bold flex items-center justify-center text-sm transition-colors",
+                "flex-shrink-0 size-6 sm:size-7 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors",
                 isDisabled
                   ? "bg-muted text-muted-foreground"
                   : "bg-primary/20 text-primary group-hover/option:bg-primary group-hover/option:text-primary-foreground"
               )}>
                 {option.label}
               </span>
-              <span className={isDisabled ? "text-muted-foreground" : "text-foreground/90"}>
+              <span className={cn(
+                "text-xs sm:text-sm",
+                isDisabled ? "text-muted-foreground" : "text-foreground/90"
+              )}>
                 {option.text}
               </span>
             </span>

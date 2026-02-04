@@ -59,20 +59,21 @@ export function ChatContainer({
       {/* Mode Header */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="mx-auto max-w-4xl px-4 py-3">
-          <div className="flex items-center justify-between">
+          {/* Desktop: single row, Mobile: two rows */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
             {/* Mode Selector (dropdown with new chat option) */}
             <ChatModeSelector currentMode={mode} conversationId={conversationId} />
 
             {/* Header Extra (Project Selector etc.) */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
               {headerExtra}
 
               {/* Branch Selector */}
               {hasBranches && (
-              <div className="relative">
+              <div className="relative shrink-0">
                 <button
                   onClick={() => setShowBranchSelector(!showBranchSelector)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm whitespace-nowrap"
                 >
                   <span className="material-symbols-outlined text-base">fork_right</span>
                   <span>{currentBranch?.name || "メイン"}</span>
@@ -237,7 +238,6 @@ function WelcomeScreen({
   onSuggestionClick?: (message: string) => void;
 }) {
   const config = MODE_CONFIG[mode];
-  const iconSize = MODE_ICON_SIZES.welcome;
 
   const suggestions: Record<ChatMode, string[]> = {
     explanation: [
@@ -261,39 +261,39 @@ function WelcomeScreen({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
+    <div className="flex flex-col items-center justify-center h-full p-4 sm:p-8">
       <div
         className={cn(
-          "rounded-2xl flex items-center justify-center mb-6",
-          iconSize.container,
+          "rounded-2xl flex items-center justify-center mb-4 sm:mb-6",
+          "size-16 sm:size-20",
           config.bgColor,
           config.color
         )}
       >
-        <span className={cn("material-symbols-outlined", iconSize.icon)}>{config.icon}</span>
+        <span className="material-symbols-outlined text-3xl sm:text-4xl">{config.icon}</span>
       </div>
 
-      <h2 className="text-2xl font-bold mb-2">{config.title}</h2>
+      <h2 className="text-xl sm:text-2xl font-bold mb-2">{config.title}</h2>
 
       {welcomeMessage && (
-        <p className="text-muted-foreground text-center max-w-md mb-8">
+        <p className="text-muted-foreground text-center max-w-md mb-6 sm:mb-8 text-sm sm:text-base">
           {welcomeMessage}
         </p>
       )}
 
-      <div className="w-full max-w-lg">
-        <p className="text-sm text-muted-foreground mb-3">
+      <div className="w-full max-w-lg px-2">
+        <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">
           こんな質問から始めてみましょう:
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {suggestions[mode].map((suggestion, index) => (
             <button
               key={index}
               onClick={() => onSuggestionClick?.(suggestion)}
               className={cn(
-                "text-left p-3 rounded-lg border border-border bg-card transition-all text-sm",
+                "text-left p-2.5 sm:p-3 rounded-lg border border-border bg-card transition-all text-xs sm:text-sm",
                 config.hoverBgColor,
-                "hover:border-primary/50"
+                "hover:border-primary/50 active:scale-[0.98]"
               )}
             >
               {suggestion}

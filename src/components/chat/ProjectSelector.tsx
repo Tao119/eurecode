@@ -75,13 +75,13 @@ export function ProjectSelector({
   );
 
   return (
-    <div ref={dropdownRef} className={cn("relative", className)}>
+    <div ref={dropdownRef} className={cn("relative shrink-0", className)}>
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all",
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all whitespace-nowrap",
           selectedProject
             ? "border-primary/50 bg-primary/5 text-primary"
             : "border-border bg-card text-muted-foreground hover:border-primary/30",
