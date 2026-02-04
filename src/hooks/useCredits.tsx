@@ -135,6 +135,26 @@ export function useCredits(): UseCreditReturn {
 
   useEffect(() => {
     fetchCredits();
+
+    // ウィンドウにフォーカスが戻った時にクレジットを再取得
+    const handleFocus = () => {
+      fetchCredits();
+    };
+
+    // ページが再表示された時にクレジットを再取得
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchCredits();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchCredits]);
 
   /**

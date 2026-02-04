@@ -18,16 +18,16 @@ export function ModeCard({ mode, disabled = false, className }: ModeCardProps) {
   const content = (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-xl border p-6 transition-all duration-300",
+        "group relative overflow-hidden rounded-xl border p-4 sm:p-6 transition-all duration-300",
         disabled
           ? "border-border bg-muted/50 cursor-not-allowed opacity-60"
-          : "border-border bg-card hover:border-primary/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 cursor-pointer",
+          : "border-border bg-card hover:border-primary/50 active:scale-[0.98] sm:hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 cursor-pointer",
         className
       )}
     >
       {/* Background decoration */}
       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-        <span className="material-symbols-outlined text-8xl text-foreground">
+        <span className="material-symbols-outlined text-6xl sm:text-8xl text-foreground">
           {config.icon}
         </span>
       </div>
@@ -47,36 +47,36 @@ export function ModeCard({ mode, disabled = false, className }: ModeCardProps) {
         <div>
           <div
             className={cn(
-              "rounded-lg flex items-center justify-center mb-4 transition-transform",
-              iconSize.container,
+              "rounded-lg flex items-center justify-center mb-3 sm:mb-4 transition-transform",
+              "size-10 sm:size-12",
               !disabled && "group-hover:scale-110",
               config.bgColor,
               config.color
             )}
           >
-            <span className={cn("material-symbols-outlined", iconSize.icon)}>
+            <span className="material-symbols-outlined text-2xl sm:text-3xl">
               {config.icon}
             </span>
           </div>
 
-          <h4 className="text-xl font-bold text-foreground mb-2">
+          <h4 className="text-lg sm:text-xl font-bold text-foreground mb-1.5 sm:mb-2">
             {config.title}
           </h4>
-          <p className="text-muted-foreground text-sm leading-relaxed">
+          <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
             {config.description}
           </p>
         </div>
 
         <div
           className={cn(
-            "mt-6 flex items-center text-sm font-bold transition-transform",
+            "mt-4 sm:mt-6 flex items-center text-xs sm:text-sm font-bold transition-transform",
             !disabled && "group-hover:translate-x-1",
             config.color
           )}
         >
           {disabled ? "利用不可" : "開始する"}
           {!disabled && (
-            <span className="material-symbols-outlined text-sm ml-1">
+            <span className="material-symbols-outlined text-xs sm:text-sm ml-1">
               arrow_forward
             </span>
           )}

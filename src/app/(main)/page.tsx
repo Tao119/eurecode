@@ -19,14 +19,14 @@ export default function HomePage() {
   // Logged in user dashboard
   if (session) {
     return (
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Welcome Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 sm:gap-4 mb-6 sm:mb-10">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
+            <h1 className="text-xl sm:text-3xl font-bold text-foreground mb-1 sm:mb-2">
               おかえりなさい, {session.user.displayName}さん
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               今日も新しいスキルを身につけましょう。
             </p>
           </div>
@@ -34,14 +34,14 @@ export default function HomePage() {
         </div>
 
         {/* Mode Selection */}
-        <section className="mb-10">
-          <h2 className="text-xl font-bold text-foreground mb-5 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">
+        <section className="mb-6 sm:mb-10">
+          <h2 className="text-base sm:text-xl font-bold text-foreground mb-3 sm:mb-5 flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-xl sm:text-2xl">
               grid_view
             </span>
             学習モードを選択
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
             <ModeCard mode="explanation" />
             <ModeCard mode="generation" />
             <ModeCard mode="brainstorm" />

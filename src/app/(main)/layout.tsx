@@ -12,7 +12,8 @@ export default function MainLayout({
       <Header />
 
       {/* Main Content (with padding for fixed header/footer) */}
-      <main className="flex-1 overflow-auto pt-14 pb-12">{children}</main>
+      {/* pb-0 on mobile for chat pages (footer hidden), pb-10 on desktop */}
+      <main className="flex-1 overflow-auto pt-14 pb-0 sm:pb-10">{children}</main>
 
       {/* Fixed Footer */}
       <Footer />

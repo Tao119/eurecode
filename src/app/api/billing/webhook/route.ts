@@ -24,6 +24,30 @@ async function createLoginToken(email: string): Promise<string> {
   return token;
 }
 
+/**
+ * Stripeのサブスクリプションから期間情報を取得
+ * SDK v20+ではitemsの下に期間情報がある
+ */
+function getSubscriptionPeriod(subscription: Stripe.Subscription): { start: Date; end: Date } {
+  const item = subscription.items.data[0];
+  const start = item?.current_period_start;
+  const end = item?.current_period_end;
+
+  if (typeof start === "number" && typeof end === "number") {
+    return {
+      start: new Date(start * 1000),
+      end: new Date(end * 1000),
+    };
+  }
+
+  // フォールバック: 現在時刻から1ヶ月
+  const now = new Date();
+  return {
+    start: now,
+    end: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
@@ -128,10 +152,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   const priceId = stripeSubscription.items.data[0]?.price.id;
-  // Access period timestamps from subscription (cast needed for Stripe SDK v20+)
-  const subAny = stripeSubscription as unknown as { current_period_start: number; current_period_end: number };
-  const currentPeriodStart = new Date(subAny.current_period_start * 1000);
-  const currentPeriodEnd = new Date(subAny.current_period_end * 1000);
+  const { start: currentPeriodStart, end: currentPeriodEnd } = getSubscriptionPeriod(stripeSubscription);
 
   // サブスクリプションをDBに保存/更新
   const subscriptionData = {
@@ -188,7 +209,7 @@ async function handleRegistrationCompleted(session: Stripe.Checkout.Session) {
 
     if (stripeSubscription && existingUser.id) {
       const priceId = stripeSubscription.items.data[0]?.price.id;
-      const subAny = stripeSubscription as unknown as { current_period_start: number; current_period_end: number };
+      const { start: periodStart, end: periodEnd } = getSubscriptionPeriod(stripeSubscription);
 
       await prisma.subscription.upsert({
         where: { userId: existingUser.id },
@@ -200,8 +221,8 @@ async function handleRegistrationCompleted(session: Stripe.Checkout.Session) {
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
           stripePriceId: priceId,
-          currentPeriodStart: new Date(subAny.current_period_start * 1000),
-          currentPeriodEnd: new Date(subAny.current_period_end * 1000),
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
         },
         update: {
           individualPlan: userType === "individual" ? (plan as IndividualPlan) : null,
@@ -226,9 +247,7 @@ async function handleRegistrationCompleted(session: Stripe.Checkout.Session) {
   }
 
   const priceId = stripeSubscription.items.data[0]?.price.id;
-  const subAny = stripeSubscription as unknown as { current_period_start: number; current_period_end: number };
-  const currentPeriodStart = new Date(subAny.current_period_start * 1000);
-  const currentPeriodEnd = new Date(subAny.current_period_end * 1000);
+  const { start: currentPeriodStart, end: currentPeriodEnd } = getSubscriptionPeriod(stripeSubscription);
 
   try {
     if (userType === "admin") {
@@ -413,10 +432,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   }
 
   const status = mapStripeStatus(subscription.status);
-  // Cast for Stripe SDK v20+ type compatibility
-  const subAny = subscription as unknown as { current_period_start: number; current_period_end: number };
-  const currentPeriodStart = new Date(subAny.current_period_start * 1000);
-  const currentPeriodEnd = new Date(subAny.current_period_end * 1000);
+  const { start: currentPeriodStart, end: currentPeriodEnd } = getSubscriptionPeriod(subscription);
 
   await prisma.subscription.update({
     where: { id: existingSubscription.id },

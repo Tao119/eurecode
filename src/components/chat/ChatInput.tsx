@@ -277,7 +277,7 @@ export function ChatInput({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="mx-auto max-w-4xl p-4">
+      <div className="mx-auto max-w-4xl px-3 sm:px-4 py-3 sm:py-4">
         {/* Drag overlay */}
         {isDragging && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-xl">
@@ -298,34 +298,34 @@ export function ChatInput({
 
         {/* Attachments preview */}
         {attachments.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-2 sm:mb-3 flex flex-wrap gap-1.5 sm:gap-2">
             {attachments.map((attachment) => (
               <div
                 key={attachment.id}
-                className="relative group flex items-center gap-2 px-3 py-2 bg-muted rounded-lg border border-border"
+                className="relative group flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-muted rounded-lg border border-border"
               >
                 {attachment.previewUrl ? (
                   <img
                     src={attachment.previewUrl}
                     alt={attachment.name}
-                    className="w-10 h-10 object-cover rounded"
+                    className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded"
                   />
                 ) : (
-                  <div className="w-10 h-10 flex items-center justify-center bg-primary/10 rounded">
-                    <span className="material-symbols-outlined text-primary">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-primary/10 rounded">
+                    <span className="material-symbols-outlined text-primary text-base sm:text-lg">
                       {attachment.type === "application/pdf" ? "picture_as_pdf" : "description"}
                     </span>
                   </div>
                 )}
-                <div className="flex-1 min-w-0 max-w-[120px]">
-                  <p className="text-xs font-medium truncate">{attachment.name}</p>
-                  <p className="text-xs text-muted-foreground">
+                <div className="flex-1 min-w-0 max-w-[80px] sm:max-w-[120px]">
+                  <p className="text-[10px] sm:text-xs font-medium truncate">{attachment.name}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {(attachment.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
                 <button
                   onClick={() => removeAttachment(attachment.id)}
-                  className="absolute -top-1 -right-1 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1.5 -right-1.5 p-1 bg-destructive text-destructive-foreground rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                   title="削除"
                 >
                   <span className="material-symbols-outlined text-xs">close</span>
@@ -335,7 +335,7 @@ export function ChatInput({
           </div>
         )}
 
-        <div className="relative flex items-end gap-2">
+        <div className="relative flex items-end gap-1.5 sm:gap-2">
           {/* File upload button */}
           <Button
             type="button"
@@ -343,10 +343,10 @@ export function ChatInput({
             disabled={disabled || isLoading || attachments.length >= MAX_FILES}
             size="icon"
             variant="ghost"
-            className="h-12 w-12 rounded-xl shrink-0"
+            className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl shrink-0"
             title="ファイルを添付（画像、PDF）"
           >
-            <span className="material-symbols-outlined">attach_file</span>
+            <span className="material-symbols-outlined text-xl sm:text-2xl">attach_file</span>
           </Button>
           <input
             ref={fileInputRef}
@@ -367,14 +367,15 @@ export function ChatInput({
               disabled={disabled || isLoading}
               rows={1}
               className={cn(
-                "w-full resize-none rounded-xl border border-border bg-card px-4 py-3 pr-12",
+                "w-full resize-none rounded-xl border border-border bg-card",
+                "px-3 py-2.5 pr-10 sm:px-4 sm:py-3 sm:pr-12",
                 "text-sm placeholder:text-muted-foreground",
                 "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary",
                 "disabled:cursor-not-allowed disabled:opacity-50",
-                "min-h-[48px] max-h-[200px]"
+                "min-h-[44px] sm:min-h-[48px] max-h-[150px] sm:max-h-[200px]"
               )}
             />
-            <div className="absolute right-3 bottom-3 text-xs text-muted-foreground">
+            <div className="absolute right-2 sm:right-3 bottom-2.5 sm:bottom-3 text-[10px] sm:text-xs text-muted-foreground">
               {input.length}/{maxLength}
             </div>
           </div>
@@ -386,21 +387,25 @@ export function ChatInput({
             size="icon"
             variant={isLoading ? "destructive" : "default"}
             className={cn(
-              "h-12 w-12 rounded-xl shrink-0 transition-all",
+              "h-10 w-10 sm:h-12 sm:w-12 rounded-xl shrink-0 transition-all",
               isLoading && "animate-pulse"
             )}
             title={isLoading ? "生成を停止" : "送信"}
           >
-            <span className="material-symbols-outlined">
+            <span className="material-symbols-outlined text-xl sm:text-2xl">
               {isLoading ? "stop" : "send"}
             </span>
           </Button>
         </div>
 
-        <p className="mt-2 text-xs text-center text-muted-foreground">
+        <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-center text-muted-foreground">
           {isLoading
-            ? "生成中... クリックで停止"
-            : "Shift + Enter で改行、Enter で送信 | 画像・PDF対応"}
+            ? "生成中... タップで停止"
+            : <>
+                <span className="hidden sm:inline">Shift + Enter で改行、Enter で送信 | 画像・PDF対応</span>
+                <span className="sm:hidden">Enter で送信 | 画像・PDF対応</span>
+              </>
+          }
         </p>
       </div>
     </div>

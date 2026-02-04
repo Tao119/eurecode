@@ -216,18 +216,40 @@ export function Header() {
           {/* Drawer */}
           <div
             className={cn(
-              "fixed top-14 left-0 bottom-0 z-40 w-64 bg-background border-r border-border transition-transform md:hidden",
+              "fixed top-14 left-0 bottom-0 z-40 w-72 bg-background border-r border-border transition-transform md:hidden overflow-y-auto",
               mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
             )}
           >
-            <nav className="p-4 space-y-1">
+            {/* User Info Summary */}
+            <div className="p-4 border-b border-border bg-muted/30">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-primary">
+                    {session.user.displayName?.charAt(0) || "U"}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{session.user.displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <CreditCounter size="sm" showLink={false} />
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <nav className="p-3 space-y-1">
+              <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                メニュー
+              </p>
               {filteredNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={closeMobileMenu}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98]",
                     isActive(item.href)
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -243,26 +265,66 @@ export function Header() {
             </nav>
 
             {/* Quick Actions */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border bg-muted/30">
-              <p className="text-xs text-muted-foreground mb-2">クイックアクション</p>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="p-3 border-t border-border">
+              <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                クイックスタート
+              </p>
+              <div className="grid grid-cols-3 gap-2 mt-1">
                 <Link
                   href="/chat/brainstorm"
                   onClick={closeMobileMenu}
-                  className="flex flex-col items-center gap-1 p-3 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 active:scale-[0.98] transition-all"
                 >
-                  <span className="material-symbols-outlined text-xl">lightbulb</span>
+                  <span className="material-symbols-outlined text-2xl">lightbulb</span>
                   <span className="text-xs font-medium">壁打ち</span>
                 </Link>
                 <Link
                   href="/chat/explanation"
                   onClick={closeMobileMenu}
-                  className="flex flex-col items-center gap-1 p-3 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 active:scale-[0.98] transition-all"
                 >
-                  <span className="material-symbols-outlined text-xl">school</span>
+                  <span className="material-symbols-outlined text-2xl">school</span>
                   <span className="text-xs font-medium">解説</span>
                 </Link>
+                <Link
+                  href="/chat/generation"
+                  onClick={closeMobileMenu}
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 active:scale-[0.98] transition-all"
+                >
+                  <span className="material-symbols-outlined text-2xl">code</span>
+                  <span className="text-xs font-medium">生成</span>
+                </Link>
               </div>
+            </div>
+
+            {/* Settings & Logout */}
+            <div className="p-3 border-t border-border">
+              <Link
+                href="/settings"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-xl">settings</span>
+                設定
+              </Link>
+              <Link
+                href="/settings/billing"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-xl">credit_card</span>
+                プラン・請求
+              </Link>
+              <button
+                onClick={() => {
+                  closeMobileMenu();
+                  signOut({ callbackUrl: "/" });
+                }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-xl">logout</span>
+                ログアウト
+              </button>
             </div>
           </div>
         </>

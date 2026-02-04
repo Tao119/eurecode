@@ -153,31 +153,50 @@ export default function JoinPage() {
 
       if (result?.error) {
         switch (result.error) {
+          // アクセスキー関連エラー
           case "INVALID_KEY":
-            setErrorMessage("無効なアクセスキーです");
+            setErrorMessage("無効なアクセスキーです。キーが正しく入力されているか確認してください。");
             break;
           case "KEY_EXPIRED":
-            setErrorMessage("このアクセスキーは有効期限が切れています");
+            setErrorMessage("このアクセスキーは有効期限が切れています。管理者に新しいキーの発行を依頼してください。");
             break;
           case "KEY_ALREADY_REGISTERED":
-            setErrorMessage("登録済み招待キーです。メールアドレスとパスワードでログインしてください。");
+            setErrorMessage("このアクセスキーは既に登録済みです。メールアドレスとパスワードでログインしてください。");
             break;
+          // メールアドレス関連エラー
           case "EMAIL_ALREADY_EXISTS":
-            setErrorMessage("このメールアドレスは既に使用されています");
+            setErrorMessage("このメールアドレスは既に別のアカウントで使用されています。別のメールアドレスを使用するか、ログインしてください。");
             break;
           case "EMAIL_PASSWORD_REQUIRED":
-            setErrorMessage("メールアドレスとパスワードを入力してください");
+            setErrorMessage("メールアドレスとパスワードを入力してください。");
+            break;
+          // 認証・サーバーエラー
+          case "CredentialsSignin":
+            setErrorMessage("認証に失敗しました。入力内容を確認してください。");
+            break;
+          case "Configuration":
+            setErrorMessage("サーバー設定エラーが発生しました。しばらく経ってから再度お試しください。");
             break;
           default:
-            setErrorMessage("参加に失敗しました。もう一度お試しください。");
+            // 詳細なエラー情報を表示
+            setErrorMessage(`参加に失敗しました（${result.error}）。しばらく経ってから再度お試しください。`);
         }
         return;
       }
 
       router.push("/");
       router.refresh();
-    } catch {
-      setErrorMessage("参加に失敗しました。もう一度お試しください。");
+    } catch (error) {
+      // ネットワークエラーやサーバーエラーの詳細を表示
+      if (error instanceof Error) {
+        if (error.message.includes("fetch") || error.message.includes("network")) {
+          setErrorMessage("ネットワークエラーが発生しました。インターネット接続を確認してください。");
+        } else {
+          setErrorMessage(`サーバーエラーが発生しました: ${error.message}`);
+        }
+      } else {
+        setErrorMessage("予期しないエラーが発生しました。しばらく経ってから再度お試しください。");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -348,7 +367,7 @@ export default function JoinPage() {
             </div>
           </CardContent>
 
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-4 pt-6">
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <>

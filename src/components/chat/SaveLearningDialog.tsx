@@ -109,39 +109,39 @@ export function SaveLearningDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden flex flex-col rounded-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">bookmark_add</span>
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <span className="material-symbols-outlined text-primary text-xl sm:text-2xl">bookmark_add</span>
             学びとして保存
           </DialogTitle>
-          <DialogDescription>
-            AIの回答から重要なポイントを学びとして保存できます
+          <DialogDescription className="text-xs sm:text-sm">
+            AIの回答から重要なポイントを学びとして保存
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-3 sm:space-y-4">
           {/* Content Preview/Edit */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">内容</label>
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-xs sm:text-sm font-medium">内容</label>
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              className="w-full h-40 p-3 rounded-lg border border-border bg-muted/30 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full h-32 sm:h-40 p-2.5 sm:p-3 rounded-lg border border-border bg-muted/30 text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="保存する内容..."
             />
           </div>
 
           {/* Tag Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">タグ（任意）</label>
-            <div className="flex flex-wrap gap-2">
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-xs sm:text-sm font-medium">タグ（任意）</label>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {SUGGESTED_TAGS.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                    "px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium transition-colors active:scale-95",
                     selectedTags.includes(tag)
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted hover:bg-muted/80 text-muted-foreground"
@@ -165,13 +165,14 @@ export function SaveLearningDialog({
                   }
                 }}
                 placeholder="カスタムタグを追加..."
-                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1 px-2.5 sm:px-3 py-2 rounded-lg border border-border bg-background text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={addCustomTag}
                 disabled={!customTag.trim()}
+                className="text-xs sm:text-sm px-3"
               >
                 追加
               </Button>
@@ -179,19 +180,19 @@ export function SaveLearningDialog({
 
             {/* Selected Tags */}
             {selectedTags.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-2">
-                <span className="text-xs text-muted-foreground">選択中:</span>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-2">
+                <span className="text-[10px] sm:text-xs text-muted-foreground">選択中:</span>
                 {selectedTags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-primary/20 text-primary"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs bg-primary/20 text-primary"
                   >
                     {tag}
                     <button
                       onClick={() => toggleTag(tag)}
                       className="hover:text-primary-foreground"
                     >
-                      <span className="material-symbols-outlined text-xs">close</span>
+                      <span className="material-symbols-outlined text-[10px] sm:text-xs">close</span>
                     </button>
                   </span>
                 ))}
@@ -200,11 +201,11 @@ export function SaveLearningDialog({
           </div>
         </div>
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="mt-3 sm:mt-4 flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             キャンセル
           </Button>
-          <Button onClick={handleSave} disabled={isSaving || !editedContent.trim()}>
+          <Button onClick={handleSave} disabled={isSaving || !editedContent.trim()} className="w-full sm:w-auto">
             {isSaving ? (
               <>
                 <span className="material-symbols-outlined animate-spin text-base mr-1">
