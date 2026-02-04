@@ -333,21 +333,44 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       const extendedToken = token as ExtendedJWT & typeof token;
+
+      // 初回ログイン時、またはセッション更新リクエスト時にユーザー情報を取得
       if (user) {
         extendedToken.id = user.id;
         extendedToken.email = user.email;
         extendedToken.displayName = user.displayName;
         extendedToken.userType = user.userType;
         extendedToken.organizationId = user.organizationId;
+      }
 
-        // Get subscription info
+      // セッション更新時（updateSession()呼び出し時）にDBから最新情報を取得
+      if (trigger === "update" && extendedToken.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: extendedToken.id },
+          select: {
+            email: true,
+            displayName: true,
+            userType: true,
+            organizationId: true,
+          },
+        });
+        if (freshUser) {
+          extendedToken.email = freshUser.email;
+          extendedToken.displayName = freshUser.displayName;
+          extendedToken.userType = freshUser.userType;
+          extendedToken.organizationId = freshUser.organizationId;
+        }
+      }
+
+      // サブスクリプション情報を取得
+      if (extendedToken.id) {
         const subscription = await prisma.subscription.findFirst({
           where: {
             OR: [
-              { userId: user.id },
-              { organizationId: user.organizationId || undefined },
+              { userId: extendedToken.id },
+              { organizationId: extendedToken.organizationId || undefined },
             ],
           },
         });
@@ -359,11 +382,12 @@ export const authConfig: NextAuthConfig = {
 
         // Get daily token limit from access key if exists, otherwise use plan default
         const accessKey = await prisma.accessKey.findFirst({
-          where: { userId: user.id },
+          where: { userId: extendedToken.id },
         });
         extendedToken.dailyTokenLimit =
           accessKey?.dailyTokenLimit || TOKEN_LIMITS[extendedToken.plan];
       }
+
       return extendedToken;
     },
     async session({ session, token }) {
