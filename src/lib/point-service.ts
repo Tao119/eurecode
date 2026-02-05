@@ -242,16 +242,16 @@ export async function canStartConversation(
 // Token-based Point Calculation
 // ============================================
 
-/** 最小消費ポイント */
-const MIN_POINTS = 0.1;
+/** 最小消費ポイント（どんな短い応答でもこの値以上を消費） */
+const MIN_POINTS = 0.3;
 
-/** ポイント最大時のトークン閾値 */
-const MAX_TOKENS_THRESHOLD = 2000;
+/** ポイント最大時のトークン閾値（この値以上は最大ポイント消費） */
+const MAX_TOKENS_THRESHOLD = 1000;
 
 /**
  * トークン使用量からポイント消費量を計算
- * - 短いレスポンス（少ないトークン）は少ないポイント
- * - 長いレスポンス（多いトークン）は最大ポイント
+ * - 短いレスポンス（少ないトークン）でも最低 0.3pt を消費
+ * - 1000トークン以上で最大ポイント到達
  * - Sonnet max: 1.0pt, Opus max: 1.6pt
  */
 export function calculatePointsFromTokens(
