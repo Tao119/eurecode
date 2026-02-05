@@ -60,7 +60,12 @@ export function PricingTable({
       const data = await response.json();
 
       if (data.url) {
+        // 新規サブスクリプション → Stripeチェックアウトへリダイレクト
         window.location.href = data.url;
+      } else if (data.success) {
+        // 既存サブスクリプションのプラン変更成功
+        router.push("/settings/billing?success=true");
+        router.refresh();
       } else {
         console.error("Checkout failed:", data.error);
         alert(data.errorJa || "決済ページの作成に失敗しました");
