@@ -18,6 +18,7 @@ interface SaveLearningDialogProps {
   content: string;
   sourceMessage: string;
   conversationId?: string;
+  onSaveSuccess?: () => void;
 }
 
 export function SaveLearningDialog({
@@ -26,6 +27,7 @@ export function SaveLearningDialog({
   content,
   sourceMessage,
   conversationId,
+  onSaveSuccess,
 }: SaveLearningDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
@@ -72,6 +74,7 @@ export function SaveLearningDialog({
       }
 
       toast.success("学びを保存しました");
+      onSaveSuccess?.();
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存に失敗しました");

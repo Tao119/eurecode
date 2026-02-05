@@ -428,6 +428,7 @@ export function ChatMessage({
         content={selectedContent}
         sourceMessage={message.content}
         conversationId={conversationId}
+        onSaveSuccess={userSettingsContext?.refetch}
       />
     </div>
   );
