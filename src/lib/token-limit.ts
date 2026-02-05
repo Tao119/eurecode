@@ -107,5 +107,23 @@ export async function updateTokenUsage(
   }
 }
 
+/**
+ * Estimate total tokens for all messages in a conversation
+ */
+export function estimateConversationTokens(
+  messages: Array<{ content: string }>,
+  systemPrompt: string
+): number {
+  const messageTokens = messages.reduce(
+    (sum, m) => sum + estimateTokens(m.content),
+    0
+  );
+  const systemTokens = estimateTokens(systemPrompt);
+  return messageTokens + systemTokens;
+}
+
+/** Reserved tokens for Claude response */
+export const RESPONSE_TOKEN_RESERVE = 4096;
+
 // Error code for token limit exceeded
 export const TOKEN_LIMIT_EXCEEDED_CODE = "TOKEN_LIMIT_EXCEEDED";

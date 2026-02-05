@@ -8,6 +8,8 @@ import { systemPrompts, brainstormSubModePrompts } from "@/lib/prompts";
 import type { BrainstormSubMode, ClaudeModel } from "@/types/chat";
 import { getModelId, DEFAULT_MODEL } from "@/types/chat";
 import { estimateTokens } from "@/lib/token-limit";
+import { compactConversationIfNeeded } from "@/lib/conversation-compactor";
+import type { ConversationMetadata } from "@/types/chat";
 import {
   canStartConversation,
   consumePoints,
@@ -15,6 +17,8 @@ import {
   getAvailableModels,
 } from "@/lib/point-service";
 import type { AIModel } from "@/config/plans";
+import { buildProjectContext } from "@/lib/rag-service";
+import { embedConversationMessages } from "@/lib/embedding-service";
 
 // Map ClaudeModel to AIModel for point consumption
 // haiku is treated as sonnet for billing purposes
@@ -156,6 +160,8 @@ const chatRequestSchema = z.object({
   }).optional(),
   // Claude モデル選択
   model: z.enum(["opus", "sonnet", "haiku"]).optional(),
+  // プロジェクトID（RAGコンテキスト注入用）
+  projectId: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -186,7 +192,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { mode, messages, conversationId, brainstormSubMode, activeArtifact, model } = parsed.data;
+    const { mode, messages, conversationId, brainstormSubMode, activeArtifact, model, projectId } = parsed.data;
     const selectedModel: ClaudeModel = model || DEFAULT_MODEL;
     const userId = session.user.id;
 
@@ -266,7 +272,7 @@ export async function POST(request: NextRequest) {
     }
 
     // サブモードに応じたシステムプロンプトを選択
-    const getSystemPrompt = (): string => {
+    const getSystemPrompt = async (): Promise<string> => {
       if (mode === "brainstorm" && brainstormSubMode) {
         return brainstormSubModePrompts[brainstormSubMode];
       }
@@ -306,6 +312,19 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
 - 代わりに: コードの使い方、注意点、カスタマイズ方法を説明
 
 このユーザーへの応答では、理解度テストや確認クイズは一切行わないでください。`;
+      }
+
+      // プロジェクトに紐づいている場合、RAGコンテキストを注入
+      if (projectId) {
+        const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+        try {
+          const ragContext = await buildProjectContext(projectId, lastUserMessage, conversationId);
+          if (ragContext) {
+            basePrompt += ragContext;
+          }
+        } catch (error) {
+          console.error("Failed to build RAG context:", error);
+        }
       }
 
       return basePrompt;
@@ -360,8 +379,16 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
 
     // Create or get conversation
     let currentConversationId = conversationId;
+    let existingConvMetadata: ConversationMetadata | null = null;
+
     if (conversationId) {
-      // Update generation status to generating
+      // Update generation status and load metadata
+      const conv = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { metadata: true },
+      });
+      existingConvMetadata = (conv?.metadata as ConversationMetadata | null) ?? null;
+
       await prisma.conversation.update({
         where: { id: conversationId, userId },
         data: {
@@ -377,6 +404,26 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
       apiKey,
     });
 
+    // Build system prompt (may include async RAG context)
+    const systemPrompt = await getSystemPrompt();
+
+    // Compact conversation if needed (summarize old messages to reduce token usage)
+    let compactResult: Awaited<ReturnType<typeof compactConversationIfNeeded>> | null = null;
+    let messagesForApi;
+    try {
+      compactResult = await compactConversationIfNeeded(
+        messages,
+        mode,
+        systemPrompt,
+        existingConvMetadata,
+        anthropic,
+      );
+      messagesForApi = compactResult.messagesForApi;
+    } catch (compactError) {
+      // Compacting failed — fall back to full message history
+      messagesForApi = messagesToAnthropicFormat(messages);
+    }
+
     // Create streaming response
     const encoder = new TextEncoder();
     let fullContent = "";
@@ -387,8 +434,8 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
           const response = await anthropic.messages.stream({
             model: getModelId(selectedModel),
             max_tokens: 4096,
-            system: getSystemPrompt(),
-            messages: messagesToAnthropicFormat(messages),
+            system: systemPrompt,
+            messages: messagesForApi,
           });
 
           let chunkCount = 0;
@@ -426,6 +473,14 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
               { role: "assistant", content: fullContent, timestamp: new Date().toISOString() },
             ];
 
+            // Merge compact summary into metadata in the same atomic update
+            const metadataUpdate = compactResult?.wasCompacted && compactResult.newSummary
+              ? {
+                  ...((existingConvMetadata as unknown as Record<string, unknown>) || {}),
+                  compactSummary: { ...compactResult.newSummary },
+                }
+              : undefined;
+
             await prisma.conversation.update({
               where: { id: currentConversationId },
               data: {
@@ -433,8 +488,12 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
                 pendingContent: null,
                 messages: updatedMessages,
                 tokensConsumed: { increment: estimatedTokens },
+                ...(metadataUpdate && { metadata: metadataUpdate }),
               },
             });
+
+            // 非同期でembedding生成（プロジェクト紐付き会話のみ対象）
+            embedConversationMessages(currentConversationId).catch(() => {});
           }
 
           // Update daily token usage

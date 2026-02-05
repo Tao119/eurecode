@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { systemPrompts } from "@/lib/prompts";
 import { detectChatMode, detectChatModeWithDetails } from "@/lib/mode-detector";
-import type { ChatMode, ClaudeModel } from "@/types/chat";
+import type { ChatMode, ClaudeModel, ConversationMetadata } from "@/types/chat";
 import { getModelId, DEFAULT_MODEL } from "@/types/chat";
+import { compactConversationIfNeeded } from "@/lib/conversation-compactor";
 
 const quickChatRequestSchema = z.object({
   content: z.string().min(1).max(10000),
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
     // Prepare messages
     let messages: Array<{ role: "user" | "assistant"; content: string }> = [];
     let currentConversationId = conversationId;
+    let existingConvMetadata: ConversationMetadata | null = null;
 
     if (conversationId) {
       // Load existing conversation
@@ -88,12 +90,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Restore messages from existing conversation
+      // Restore messages and metadata from existing conversation
       const existingMessages = existingConv.messages as Array<{
         role: "user" | "assistant";
         content: string;
       }> | null;
       messages = existingMessages || [];
+      existingConvMetadata = (existingConv.metadata as ConversationMetadata | null) ?? null;
 
       // Update generation status
       await prisma.conversation.update({
@@ -128,6 +131,26 @@ export async function POST(request: NextRequest) {
       apiKey,
     });
 
+    // Compact conversation if needed (summarize old messages to reduce token usage)
+    let compactResult: Awaited<ReturnType<typeof compactConversationIfNeeded>> | null = null;
+    let messagesForApi;
+    try {
+      compactResult = await compactConversationIfNeeded(
+        messages,
+        mode,
+        systemPrompts[mode],
+        existingConvMetadata,
+        anthropic,
+      );
+      messagesForApi = compactResult.messagesForApi;
+    } catch {
+      // Compacting failed — fall back to full message history
+      messagesForApi = messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+    }
+
     // Create streaming response
     const encoder = new TextEncoder();
     let fullContent = "";
@@ -151,10 +174,7 @@ export async function POST(request: NextRequest) {
             model: getModelId(selectedModel),
             max_tokens: 4096,
             system: systemPrompts[mode],
-            messages: messages.map((msg) => ({
-              role: msg.role,
-              content: msg.content,
-            })),
+            messages: messagesForApi,
           });
 
           let chunkCount = 0;
@@ -207,6 +227,14 @@ export async function POST(request: NextRequest) {
               },
             ];
 
+            // Merge compact summary into metadata in the same atomic update
+            const metadataUpdate = compactResult?.wasCompacted && compactResult.newSummary
+              ? {
+                  ...((existingConvMetadata as unknown as Record<string, unknown>) || {}),
+                  compactSummary: { ...compactResult.newSummary },
+                }
+              : undefined;
+
             await prisma.conversation.update({
               where: { id: currentConversationId },
               data: {
@@ -215,6 +243,7 @@ export async function POST(request: NextRequest) {
                 messages: updatedMessages,
                 tokensConsumed: { increment: estimatedTokens },
                 ...(generatedTitle && { title: generatedTitle }),
+                ...(metadataUpdate && { metadata: metadataUpdate }),
               },
             });
           }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, createContext, useContext, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { Message, InteractiveQuestion, InteractiveQuizForm, ChatMode, FileAttachment } from "@/types/chat";
 import ReactMarkdown from "react-markdown";
@@ -659,17 +660,29 @@ const markdownComponents: Components = {
       {children}
     </blockquote>
   ),
-  // Links
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      className="text-primary hover:underline"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  ),
+  // Links (internal citation links use Next.js Link for SPA navigation)
+  a: ({ href, children }) => {
+    if (href?.startsWith("/chat/")) {
+      return (
+        <Link
+          href={href as string}
+          className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+        >
+          {children}
+        </Link>
+      );
+    }
+    return (
+      <a
+        href={href}
+        className="text-primary hover:underline"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    );
+  },
   // Horizontal rule
   hr: () => <hr className="my-4 border-border" />,
   // Tables
@@ -806,18 +819,29 @@ function findCodeBlocksInText(content: string): string {
   return result.join("\n");
 }
 
+// Convert [[ref:conversationId:mode|displayText]] citations to markdown links
+function preprocessCitations(content: string): string {
+  return content.replace(
+    /\[\[ref:([a-f0-9-]+):(\w+)\|([^\]]+)\]\]/g,
+    (_, convId, mode, title) => `[📎 ${title}](/chat/${mode}/${convId})`
+  );
+}
+
 // Preprocess content to wrap unformatted code in code blocks
 function preprocessContent(content: string): string {
+  // Convert RAG citations to markdown links
+  let processed = preprocessCitations(content);
+
   // If content already has code blocks, return as-is
-  if (/```[\s\S]*```/.test(content)) {
-    return content;
+  if (/```[\s\S]*```/.test(processed)) {
+    return processed;
   }
 
   // Find code blocks within mixed content (line-by-line detection only).
   // We do NOT wrap the entire content as a code block - the AI formats
   // code with ``` markers. Full-content wrapping caused false positives
   // when explanatory text contained code-related keywords.
-  return findCodeBlocksInText(content);
+  return findCodeBlocksInText(processed);
 }
 
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
