@@ -231,10 +231,10 @@ function ChoiceQuestion({
                     : "border-border bg-card hover:bg-primary/5 hover:border-primary/50"
               )}
             >
-              <span className="inline-flex items-center gap-3">
+              <span className="flex items-start gap-2 sm:gap-3">
                 <span
                   className={cn(
-                    "flex-shrink-0 size-7 rounded-full font-bold flex items-center justify-center text-sm transition-colors",
+                    "flex-shrink-0 size-6 sm:size-7 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors mt-0.5",
                     isSelected
                       ? "bg-primary text-primary-foreground"
                       : "bg-primary/20 text-primary"
@@ -242,7 +242,10 @@ function ChoiceQuestion({
                 >
                   {option.label}
                 </span>
-                <span className={isSelected ? "text-foreground font-medium" : "text-foreground/90"}>
+                <span className={cn(
+                  "min-w-0 break-words text-sm",
+                  isSelected ? "text-foreground font-medium" : "text-foreground/90"
+                )}>
                   {option.text}
                 </span>
               </span>

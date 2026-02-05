@@ -471,9 +471,9 @@ function OptionButtons({
                 : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 active:scale-[0.98] group/option cursor-pointer"
             )}
           >
-            <span className="inline-flex items-center gap-2 sm:gap-3">
+            <span className="flex items-start gap-2 sm:gap-3">
               <span className={cn(
-                "flex-shrink-0 size-6 sm:size-7 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors",
+                "flex-shrink-0 size-6 sm:size-7 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors mt-0.5",
                 isDisabled
                   ? "bg-muted text-muted-foreground"
                   : "bg-primary/20 text-primary group-hover/option:bg-primary group-hover/option:text-primary-foreground"
@@ -481,7 +481,7 @@ function OptionButtons({
                 {option.label}
               </span>
               <span className={cn(
-                "text-xs sm:text-sm",
+                "text-xs sm:text-sm min-w-0 break-words",
                 isDisabled ? "text-muted-foreground" : "text-foreground/90"
               )}>
                 {option.text}

@@ -220,40 +220,40 @@ function QuizOptionButton({
         getStyles()
       )}
     >
-      <span className="inline-flex items-center gap-3">
+      <span className="flex items-start gap-2 sm:gap-3">
         <span
           className={cn(
-            "flex-shrink-0 size-7 rounded-full font-bold flex items-center justify-center text-sm transition-colors",
+            "flex-shrink-0 size-6 sm:size-7 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors mt-0.5",
             getIconStyles()
           )}
         >
           {showResult && isSelected ? (
             isCorrect ? (
-              <span className="material-symbols-outlined text-sm">check</span>
+              <span className="material-symbols-outlined text-xs sm:text-sm">check</span>
             ) : (
-              <span className="material-symbols-outlined text-sm">close</span>
+              <span className="material-symbols-outlined text-xs sm:text-sm">close</span>
             )
           ) : showResult && isCorrect ? (
-            <span className="material-symbols-outlined text-sm">check</span>
+            <span className="material-symbols-outlined text-xs sm:text-sm">check</span>
           ) : (
             String.fromCharCode(65 + option.id) // A, B, C, D
           )}
         </span>
         <span
           className={cn(
-            "transition-colors",
+            "min-w-0 break-words text-sm transition-colors",
             showResult && !isSelected && !isCorrect
               ? "text-muted-foreground"
               : "text-foreground/90"
           )}
         >
           {option.text}
+          {option.description && (
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              {option.description}
+            </span>
+          )}
         </span>
-        {option.description && (
-          <span className="text-xs text-muted-foreground ml-auto">
-            {option.description}
-          </span>
-        )}
       </span>
     </button>
   );

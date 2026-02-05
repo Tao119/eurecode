@@ -170,7 +170,7 @@ export function GenerationQuiz({
                 onClick={() => handleSelect(option.label)}
                 disabled={showResult}
                 className={cn(
-                  "w-full text-left p-4 rounded-lg border-2 transition-all group",
+                  "w-full text-left p-3 sm:p-4 rounded-lg border-2 transition-all group",
                   !showResult && "hover:border-yellow-500/50 hover:bg-yellow-500/5",
                   !showResult && !isSelected && "border-border bg-card",
                   showCorrect && "border-green-500 bg-green-500/10",
@@ -178,21 +178,21 @@ export function GenerationQuiz({
                   showResult && !isSelected && !isCorrectAnswer && "opacity-50"
                 )}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-2 sm:gap-3">
                   {/* ラベル */}
                   <span
                     className={cn(
-                      "flex-shrink-0 size-8 rounded-full font-bold flex items-center justify-center text-sm transition-colors",
+                      "flex-shrink-0 size-7 sm:size-8 rounded-full font-bold flex items-center justify-center text-xs sm:text-sm transition-colors mt-0.5",
                       !showResult && "bg-muted text-foreground group-hover:bg-yellow-500 group-hover:text-white",
                       showCorrect && "bg-green-500 text-white",
                       showIncorrect && "bg-red-500 text-white"
                     )}
                   >
                     {showCorrect && (
-                      <span className="material-symbols-outlined text-lg">check</span>
+                      <span className="material-symbols-outlined text-base sm:text-lg">check</span>
                     )}
                     {showIncorrect && (
-                      <span className="material-symbols-outlined text-lg">close</span>
+                      <span className="material-symbols-outlined text-base sm:text-lg">close</span>
                     )}
                     {!showResult && option.label}
                   </span>
@@ -200,7 +200,7 @@ export function GenerationQuiz({
                   {/* テキスト */}
                   <span
                     className={cn(
-                      "flex-1 text-foreground/90",
+                      "flex-1 min-w-0 break-words text-sm sm:text-base text-foreground/90",
                       showCorrect && "text-green-400 font-medium",
                       showIncorrect && "text-red-400"
                     )}
