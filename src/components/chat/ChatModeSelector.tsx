@@ -11,18 +11,21 @@ import {
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
 import type { ChatMode } from "@/types/chat";
 import { cn } from "@/lib/utils";
+import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
 
 interface ChatModeSelectorProps {
   currentMode: ChatMode;
   conversationId?: string;
 }
 
-const MODES: ChatMode[] = ["explanation", "generation", "brainstorm"];
+const ALL_MODES: ChatMode[] = ["explanation", "generation", "brainstorm"];
 
 export function ChatModeSelector({ currentMode, conversationId }: ChatModeSelectorProps) {
   const router = useRouter();
   const config = MODE_CONFIG[currentMode];
   const iconSize = MODE_ICON_SIZES.header;
+  const userSettings = useUserSettingsOptional();
+  const allowedModes = userSettings?.allowedModes ?? ALL_MODES;
 
   const handleModeChange = (mode: ChatMode) => {
     if (mode === currentMode) return;
@@ -92,7 +95,7 @@ export function ChatModeSelector({ currentMode, conversationId }: ChatModeSelect
         <div className="px-2 py-1.5">
           <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">モードを切り替え</p>
         </div>
-        {MODES.map((mode) => {
+        {ALL_MODES.filter((mode) => allowedModes.includes(mode)).map((mode) => {
           const modeConfig = MODE_CONFIG[mode];
           const isActive = mode === currentMode;
 

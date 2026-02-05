@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useCredits } from "@/hooks/useCredits";
+import { MODE_CONFIG } from "@/config/modes";
+import type { ChatMode } from "@/types/chat";
 
 interface AccessKeySettings {
   allowedModes?: ("explanation" | "generation" | "brainstorm")[];
@@ -107,6 +109,7 @@ export default function AccessKeysPage() {
   const [editCreditLimit, setEditCreditLimit] = useState(100);
   const [editExpiresAt, setEditExpiresAt] = useState<string>("");
   const [editUnlockSkipAllowed, setEditUnlockSkipAllowed] = useState(false);
+  const [editAllowedModes, setEditAllowedModes] = useState<ChatMode[]>(["explanation", "generation", "brainstorm"]);
   const [updating, setUpdating] = useState(false);
 
   // Re-issue state
@@ -268,6 +271,7 @@ export default function AccessKeysPage() {
     setEditCreditLimit(key.dailyTokenLimit);
     setEditExpiresAt(key.expiresAt ? key.expiresAt.split("T")[0] : "");
     setEditUnlockSkipAllowed(key.settings?.unlockSkipAllowed ?? false);
+    setEditAllowedModes(key.settings?.allowedModes ?? ["explanation", "generation", "brainstorm"]);
     setEditDialogOpen(true);
   };
 
@@ -295,6 +299,7 @@ export default function AccessKeysPage() {
         expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
         settings: {
           unlockSkipAllowed: editUnlockSkipAllowed,
+          allowedModes: editAllowedModes,
         },
       };
 
@@ -863,6 +868,45 @@ export default function AccessKeysPage() {
               <p className="text-xs text-muted-foreground">
                 空欄にすると無期限になります
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-medium">利用可能なモード</Label>
+              <p className="text-xs text-muted-foreground">
+                このキーで利用できる学習モードを選択します
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(["explanation", "generation", "brainstorm"] as const).map((mode) => {
+                  const modeConfig = MODE_CONFIG[mode];
+                  const isActive = editAllowedModes.includes(mode);
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          if (editAllowedModes.length > 1) {
+                            setEditAllowedModes(editAllowedModes.filter((m) => m !== mode));
+                          }
+                        } else {
+                          setEditAllowedModes([...editAllowedModes, mode]);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors cursor-pointer",
+                        isActive
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      <span className="material-symbols-outlined text-base">{modeConfig.icon}</span>
+                      {modeConfig.title}
+                    </button>
+                  );
+                })}
+              </div>
+              {editAllowedModes.length === 1 && (
+                <p className="text-xs text-amber-500">※ 少なくとも1つのモードが必要です</p>
+              )}
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border">
               <div>

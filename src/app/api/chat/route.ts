@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
     const selectedModel: ClaudeModel = model || DEFAULT_MODEL;
     const userId = session.user.id;
 
-    // ユーザー設定を取得（スキップモードの判定用 + 組織ID）
+    // ユーザー設定を取得（スキップモードの判定用 + 組織ID + モード制限）
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -200,6 +200,11 @@ export async function POST(request: NextRequest) {
         accessKey: {
           select: {
             settings: true,
+            organization: {
+              select: {
+                settings: true,
+              },
+            },
           },
         },
       },
@@ -208,7 +213,7 @@ export async function POST(request: NextRequest) {
     // スキップモードかどうかを判定
     let isSkipMode = false;
     if (user) {
-      const userSettings = user.settings as { unlockSkipAllowed?: boolean } | null;
+      const userSettings = user.settings as { unlockSkipAllowed?: boolean; allowedModes?: string[] } | null;
       isSkipMode = userSettings?.unlockSkipAllowed ?? false;
 
       // メンバーユーザーはAPIキーの設定を優先
@@ -216,6 +221,46 @@ export async function POST(request: NextRequest) {
         const accessKeySettings = user.accessKey.settings as { unlockSkipAllowed?: boolean };
         if (accessKeySettings.unlockSkipAllowed !== undefined) {
           isSkipMode = accessKeySettings.unlockSkipAllowed;
+        }
+      }
+
+      // メンバーユーザーの利用可能モードを検証
+      if (user.userType === "member") {
+        // 優先順位: ユーザー設定 > アクセスキー設定 > 組織設定
+        let effectiveAllowedModes: string[] = ["explanation", "generation", "brainstorm"];
+
+        // 組織設定をチェック（最低優先）
+        if (user.accessKey?.organization?.settings) {
+          const orgSettings = user.accessKey.organization.settings as { allowedModes?: string[] };
+          if (orgSettings.allowedModes && orgSettings.allowedModes.length > 0) {
+            effectiveAllowedModes = orgSettings.allowedModes;
+          }
+        }
+
+        // アクセスキーの設定をチェック（中優先）
+        if (user.accessKey?.settings) {
+          const akSettings = user.accessKey.settings as { allowedModes?: string[] };
+          if (akSettings.allowedModes && akSettings.allowedModes.length > 0) {
+            effectiveAllowedModes = akSettings.allowedModes;
+          }
+        }
+
+        // ユーザー個別設定が最優先
+        if (userSettings?.allowedModes && userSettings.allowedModes.length > 0) {
+          effectiveAllowedModes = userSettings.allowedModes;
+        }
+
+        if (!effectiveAllowedModes.includes(mode)) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: {
+                code: "MODE_NOT_ALLOWED",
+                message: "このモードは利用できません",
+              },
+            }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          );
         }
       }
     }

@@ -96,7 +96,7 @@ const updateKeySchema = z.object({
   // Accept null, undefined, or any string that can be parsed as a date
   expiresAt: z.union([z.string(), z.null()]).optional(),
   settings: z.object({
-    allowedModes: z.array(z.enum(["explanation", "generation", "brainstorm"])).optional(),
+    allowedModes: z.array(z.enum(["explanation", "generation", "brainstorm"])).min(1).optional(),
     allowedTechStacks: z.array(z.string()).optional(),
     unlockSkipAllowed: z.boolean().optional(),
   }).optional(),

@@ -3,9 +3,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { DEFAULT_USER_SETTINGS, type UserSettings } from "@/types/user";
+import type { ChatMode } from "@/types/chat";
+
+const ALL_MODES: ChatMode[] = ["explanation", "generation", "brainstorm"];
 
 interface UserSettingsContextValue {
   settings: UserSettings;
+  allowedModes: ChatMode[];
   isLoading: boolean;
   error: Error | null;
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
@@ -21,6 +25,7 @@ interface UserSettingsProviderProps {
 export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
   const { status } = useSession();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
+  const [allowedModes, setAllowedModes] = useState<ChatMode[]>(ALL_MODES);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -36,6 +41,9 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
 
       if (data.success) {
         setSettings(data.data);
+        if (data.data.allowedModes) {
+          setAllowedModes(data.data.allowedModes);
+        }
       } else {
         throw new Error(data.error?.message || "設定の取得に失敗しました");
       }
@@ -86,6 +94,7 @@ export function UserSettingsProvider({ children }: UserSettingsProviderProps) {
     <UserSettingsContext.Provider
       value={{
         settings,
+        allowedModes,
         isLoading,
         error,
         updateSettings,

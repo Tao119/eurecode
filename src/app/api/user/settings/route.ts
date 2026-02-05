@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { DEFAULT_USER_SETTINGS, type UserSettings } from "@/types/user";
+import type { ChatMode } from "@/types/chat";
 
 const updateSettingsSchema = z.object({
   quizEnabled: z.boolean().optional(),
@@ -37,6 +38,7 @@ export async function GET() {
             organization: {
               select: {
                 name: true,
+                settings: true,
               },
             },
           },
@@ -83,6 +85,39 @@ export async function GET() {
     // Get organization name for member users
     const organizationName = user.userType === "member" ? user.accessKey?.organization?.name : null;
 
+    // Compute effective allowedModes for the user
+    const allModes: ChatMode[] = ["explanation", "generation", "brainstorm"];
+    const validModes = new Set<string>(allModes);
+    const filterValidModes = (modes: unknown): ChatMode[] | null => {
+      if (!Array.isArray(modes)) return null;
+      const filtered = modes.filter((m): m is ChatMode => typeof m === "string" && validModes.has(m));
+      return filtered.length > 0 ? filtered : null;
+    };
+
+    let allowedModes: ChatMode[] = allModes;
+
+    if (user.userType === "member") {
+      // Start with organization-level defaults
+      const orgSettings = user.accessKey?.organization?.settings as Record<string, unknown> | null;
+      const orgModes = filterValidModes(orgSettings?.allowedModes);
+      if (orgModes) {
+        allowedModes = orgModes;
+      }
+
+      // Override with access key-level settings
+      const akSettings = user.accessKey?.settings as Record<string, unknown> | null;
+      const akModes = filterValidModes(akSettings?.allowedModes);
+      if (akModes) {
+        allowedModes = akModes;
+      }
+
+      // Override with per-member settings (highest priority)
+      const memberModes = filterValidModes((userSettings as Record<string, unknown> | null)?.allowedModes);
+      if (memberModes) {
+        allowedModes = memberModes;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -90,6 +125,7 @@ export async function GET() {
         tokenUsage: tokenUsage?.tokensUsed || 0,
         dailyTokenLimit,
         organizationName,
+        allowedModes,
       },
     });
   } catch (error) {
