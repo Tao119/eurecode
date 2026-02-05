@@ -105,8 +105,32 @@ export async function GET() {
         allocatedPoints = allocation.allocatedPoints;
         allocatedUsed = allocation.usedPoints;
       } else {
-        // 割り当てがない場合は0ポイント
-        allocatedPoints = 0;
+        // 割り当てがない場合、アクセスキーのdailyTokenLimitから自動作成
+        const accessKey = await prisma.accessKey.findFirst({
+          where: { userId: userId },
+        });
+
+        if (accessKey?.dailyTokenLimit) {
+          const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+          const newAllocation = await prisma.creditAllocation.create({
+            data: {
+              organizationId: user.organizationId!,
+              userId: userId,
+              allocatedPoints: accessKey.dailyTokenLimit,
+              usedPoints: 0,
+              periodStart,
+              periodEnd,
+              note: `アクセスキー ${accessKey.keyCode} による自動割り当て`,
+            },
+          });
+
+          allocatedPoints = newAllocation.allocatedPoints;
+          allocatedUsed = 0;
+        } else {
+          allocatedPoints = 0;
+        }
       }
     }
 

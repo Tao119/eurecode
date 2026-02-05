@@ -24,6 +24,11 @@ const adminNavItems = [
     label: "メンバー",
     icon: "group",
   },
+  {
+    href: "/admin/settings",
+    label: "設定",
+    icon: "settings",
+  },
 ];
 
 export default function AdminLayout({

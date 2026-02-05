@@ -323,6 +323,35 @@ export const authConfig: NextAuthConfig = {
           },
         });
 
+        // Create CreditAllocation for the member based on the access key's dailyTokenLimit
+        if (accessKey.dailyTokenLimit && accessKey.organizationId) {
+          const now = new Date();
+          const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+          await prisma.creditAllocation.upsert({
+            where: {
+              organizationId_userId_periodStart: {
+                organizationId: accessKey.organizationId,
+                userId: targetUser.id,
+                periodStart,
+              },
+            },
+            update: {
+              allocatedPoints: accessKey.dailyTokenLimit,
+            },
+            create: {
+              organizationId: accessKey.organizationId,
+              userId: targetUser.id,
+              allocatedPoints: accessKey.dailyTokenLimit,
+              usedPoints: 0,
+              periodStart,
+              periodEnd,
+              note: `アクセスキー ${keyCode} による自動割り当て`,
+            },
+          });
+        }
+
         return {
           id: targetUser.id,
           email: targetUser.email,
