@@ -239,6 +239,8 @@ const DEFAULT_BRAINSTORM_STATE: BrainstormModeState = {
   phaseProgress: createDefaultPhaseProgress(),
   transitionPolicy: "suggest",  // デフォルトは suggest
   transitionSuggestion: DEFAULT_TRANSITION_SUGGESTION,
+  isCompleted: false,
+  completedAt: null,
 };
 
 export { DEFAULT_BRAINSTORM_STATE };
@@ -382,6 +384,18 @@ export function useBrainstormMode(options?: UseBrainstormModeOptions) {
   // リセット
   const reset = useCallback(() => {
     setState(DEFAULT_BRAINSTORM_STATE);
+  }, []);
+
+  // 全フェーズ完了としてマーク
+  const markAsCompleted = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      isCompleted: true,
+      completedAt: new Date().toISOString(),
+      completedPhases: prev.completedPhases.includes("task-breakdown")
+        ? [...prev.completedPhases]
+        : [...prev.completedPhases, "task-breakdown"],
+    }));
   }, []);
 
   // サブモードを変更
@@ -589,6 +603,7 @@ export function useBrainstormMode(options?: UseBrainstormModeOptions) {
     toggleStepCompletion,
     addInsight,
     reset,
+    markAsCompleted,
     setSubMode,
     restoreState,
     // 新しいフェーズ進行度管理

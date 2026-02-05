@@ -429,6 +429,23 @@ export interface ReflectionData {
   };
 }
 
+// ===========================================
+// Conversation Compacting (要約による履歴圧縮)
+// ===========================================
+
+export interface ConversationCompactSummary {
+  /** 要約テキスト */
+  content: string;
+  /** 要約生成日時 */
+  generatedAt: string;
+  /** 要約に含まれた最後のメッセージindex (0-based) */
+  lastSummarizedMessageIndex: number;
+  /** 要約されたメッセージ数 */
+  summarizedMessageCount: number;
+  /** 要約自体の推定トークン数 */
+  summaryTokens: number;
+}
+
 export interface ConversationMetadata {
   options: ChatOptions;
   state: ChatState;
@@ -438,6 +455,8 @@ export interface ConversationMetadata {
   brainstormState?: BrainstormModeState;
   // 最後にアクティブだった分岐ID
   lastActiveBranchId?: string;
+  // 会話コンパクティングの要約
+  compactSummary?: ConversationCompactSummary;
 }
 
 // 壁打ちモードの状態（永続化用）
@@ -458,6 +477,10 @@ export interface BrainstormModeState {
   transitionPolicy: PhaseTransitionPolicy;
   /** 遷移提案の状態 */
   transitionSuggestion: TransitionSuggestion;
+  /** 全フェーズ完了フラグ */
+  isCompleted: boolean;
+  /** 完了日時 */
+  completedAt: string | null;
 }
 
 // ===========================================

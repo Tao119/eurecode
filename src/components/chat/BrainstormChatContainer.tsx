@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
@@ -9,6 +10,7 @@ import { PlanStepList, SuggestedPlan } from "./PlanStepList";
 import { ProjectSaveModal } from "@/components/projects/ProjectSaveModal";
 import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
+import { exportBrainstormToMarkdown, downloadMarkdownFile } from "@/lib/markdown-exporter";
 import {
   useBrainstormMode,
   BRAINSTORM_PHASES,
@@ -255,6 +257,8 @@ export function BrainstormChatContainer({
   const currentBranch = branches.find((b) => b.id === currentBranchId);
   const [hasRestoredState, setHasRestoredState] = useState(false);
 
+  const router = useRouter();
+
   const {
     state,
     currentPhaseInfo,
@@ -264,6 +268,7 @@ export function BrainstormChatContainer({
     setPlanSteps,
     setSubMode: setInternalSubMode,
     restoreState,
+    markAsCompleted,
     // 新しいフェーズ進行度管理
     updatePhaseInfoBatch,
     showTransitionSuggestion,
@@ -340,11 +345,17 @@ export function BrainstormChatContainer({
     const currentIndex = BRAINSTORM_PHASES.indexOf(state.currentPhase);
     const nextPhase = BRAINSTORM_PHASES[currentIndex + 1];
 
+    // 最終フェーズ（task-breakdown）の完了判定
+    if (!nextPhase && (hasCompletionIntent || canTransitionToNext())) {
+      if (!state.isCompleted) {
+        markAsCompleted();
+      }
+    }
+
     // 遷移提案の表示条件:
     // 1. 完了意図があり、次のフェーズが存在する場合
     // 2. または、充足度が閾値を超えている場合
     if (nextPhase && (hasCompletionIntent || canTransitionToNext())) {
-      const criteria = getPhaseCompletionCriteria(state.currentPhase);
       const progress = state.phaseProgress[state.currentPhase];
 
       // すでに遷移提案が表示されていない場合のみ表示
@@ -369,8 +380,10 @@ export function BrainstormChatContainer({
     state.currentPhase,
     state.phaseProgress,
     state.transitionSuggestion.isVisible,
+    state.isCompleted,
     updatePhaseInfoBatch,
     showTransitionSuggestion,
+    markAsCompleted,
     canTransitionToNext,
   ]);
 
@@ -440,62 +453,60 @@ export function BrainstormChatContainer({
     setSuggestedSteps([]);
   }, [onSendMessage]);
 
+  // Markdownエクスポート
+  const handleExportMarkdown = useCallback(() => {
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const titleSlug = state.ideaSummary
+      ? state.ideaSummary.slice(0, 30).replace(/[/\\:*?"<>|]/g, "").trim()
+      : "";
+    const filename = `${timestamp}_${titleSlug || "brainstorm"}.md`;
+
+    const markdown = exportBrainstormToMarkdown(messages, state, {
+      title: state.ideaSummary || "ブレインストーミング記録",
+      includeTimestamps: true,
+    });
+
+    downloadMarkdownFile(markdown, filename);
+  }, [messages, state]);
+
+  // 新しいブレインストーミングを開始
+  const handleStartNewBrainstorm = useCallback(() => {
+    router.push("/chat/brainstorm");
+  }, [router]);
+
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header - Mobile Optimized */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80 relative z-20">
-        <div className="mx-auto max-w-4xl px-2 sm:px-4 py-2 sm:py-3">
-          {/* Single row layout */}
+        <div className="mx-auto max-w-4xl px-2 sm:px-4 py-2 sm:py-3 space-y-1.5">
+          {/* Row 1: Mode selector + header extra controls */}
           <div className="flex items-center justify-between gap-2">
             {/* Left: Mode Selector */}
             <div className="min-w-0">
               <ChatModeSelector currentMode="brainstorm" conversationId={conversationId} />
             </div>
 
-            {/* Right: Controls */}
+            {/* Right: Header Extra + Save + Branch */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Header Extra (Project Selector etc.) - Hidden on mobile */}
+              {/* Header Extra (Model & Project Selector) - Hidden on mobile */}
               <div className="hidden sm:flex items-center gap-2">
                 {headerExtra}
               </div>
 
-              {/* Mode Toggle - Compact on mobile */}
-              <SubModeToggle
-                currentMode={state.subMode}
-                onModeChange={handleSubModeChange}
-                disabled={isLoading || messages.length > 0}
-              />
-
-              {/* Phase Button - Planning mode only */}
-              {state.subMode === "planning" && (
-                <>
-                  {/* Mobile: Compact phase button */}
-                  <button
-                    onClick={() => setShowPhaseMenu(!showPhaseMenu)}
-                    className="sm:hidden flex items-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30"
-                  >
-                    <span className="text-xs font-bold text-purple-400">
-                      {BRAINSTORM_PHASES.indexOf(state.currentPhase) + 1}/{BRAINSTORM_PHASES.length}
-                    </span>
-                    <span className="material-symbols-outlined text-purple-400 text-sm">
-                      {showPhaseMenu ? "expand_less" : "expand_more"}
-                    </span>
-                  </button>
-
-                  {/* Desktop: Full phase indicator */}
-                  <div className="hidden sm:block relative z-30">
-                    <BrainstormPhaseIndicator
-                      currentPhase={state.currentPhase}
-                      completedPhases={state.completedPhases}
-                      compact
-                      onPhaseClick={goToPhase}
-                      onPhaseSkip={handlePhaseSkip}
-                      disabled={isLoading}
-                    />
-                  </div>
-                </>
+              {/* Export Button */}
+              {messages.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleExportMarkdown}
+                  className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3 p-0"
+                  title="Markdownでエクスポート"
+                >
+                  <span className="material-symbols-outlined text-base">download</span>
+                  <span className="hidden sm:inline ml-1">MD</span>
+                </Button>
               )}
 
               {/* Save Project Button - Icon only */}
@@ -538,6 +549,46 @@ export function BrainstormChatContainer({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Row 2: Sub mode toggle + Phase indicator */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Mode Toggle */}
+            <SubModeToggle
+              currentMode={state.subMode}
+              onModeChange={handleSubModeChange}
+              disabled={isLoading || messages.length > 0}
+            />
+
+            {/* Phase Button - Planning mode only */}
+            {state.subMode === "planning" && (
+              <>
+                {/* Mobile: Compact phase button */}
+                <button
+                  onClick={() => setShowPhaseMenu(!showPhaseMenu)}
+                  className="sm:hidden flex items-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 whitespace-nowrap"
+                >
+                  <span className="text-xs font-bold text-purple-400">
+                    {BRAINSTORM_PHASES.indexOf(state.currentPhase) + 1}/{BRAINSTORM_PHASES.length}
+                  </span>
+                  <span className="material-symbols-outlined text-purple-400 text-sm">
+                    {showPhaseMenu ? "expand_less" : "expand_more"}
+                  </span>
+                </button>
+
+                {/* Desktop: Full phase indicator */}
+                <div className="hidden sm:block relative z-30">
+                  <BrainstormPhaseIndicator
+                    currentPhase={state.currentPhase}
+                    completedPhases={state.completedPhases}
+                    compact
+                    onPhaseClick={goToPhase}
+                    onPhaseSkip={handlePhaseSkip}
+                    disabled={isLoading}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Mobile Phase Dropdown - Planning mode only */}
@@ -648,6 +699,16 @@ export function BrainstormChatContainer({
                   editable
                 />
               </div>
+            )}
+
+            {/* Brainstorm Completion UI */}
+            {state.isCompleted && (
+              <BrainstormCompletionUI
+                brainstormState={state}
+                onSaveAsProject={() => setShowSaveModal(true)}
+                onExportMarkdown={handleExportMarkdown}
+                onStartNew={handleStartNewBrainstorm}
+              />
             )}
 
             <div ref={endRef} />
@@ -925,7 +986,7 @@ function SubModeToggle({
           onClick={() => onModeChange(mode.mode)}
           disabled={disabled}
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all",
+            "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap",
             currentMode === mode.mode
               ? "bg-purple-500/20 text-purple-400 shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -1024,6 +1085,105 @@ function TransitionSuggestionUI({
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Brainstorm Completion UI - 全フェーズ完了時の表示
+function BrainstormCompletionUI({
+  brainstormState,
+  onSaveAsProject,
+  onExportMarkdown,
+  onStartNew,
+}: {
+  brainstormState: BrainstormModeState;
+  onSaveAsProject: () => void;
+  onExportMarkdown: () => void;
+  onStartNew: () => void;
+}) {
+  const completedAt = brainstormState.completedAt
+    ? new Date(brainstormState.completedAt)
+    : new Date();
+
+  return (
+    <div className="px-4 py-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="animate-in slide-in-from-bottom-2 duration-300 rounded-2xl border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 via-emerald-500/10 to-teal-500/10 p-6 sm:p-8">
+          {/* 完了アイコン */}
+          <div className="flex justify-center mb-4">
+            <div className="size-16 sm:size-20 rounded-full bg-green-500/20 flex items-center justify-center">
+              <span className="material-symbols-outlined text-green-500 text-4xl sm:text-5xl">
+                check_circle
+              </span>
+            </div>
+          </div>
+
+          {/* 完了メッセージ */}
+          <h3 className="text-xl sm:text-2xl font-bold text-center mb-2">
+            企画書が完成しました
+          </h3>
+          <p className="text-sm text-muted-foreground text-center mb-6">
+            {completedAt.toLocaleString("ja-JP", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+
+          {/* サマリー */}
+          {brainstormState.ideaSummary && (
+            <div className="bg-card/50 rounded-lg p-4 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-green-500 text-sm">
+                  lightbulb
+                </span>
+                <span className="text-sm font-medium">アイデア</span>
+              </div>
+              <p className="text-sm pl-6">{brainstormState.ideaSummary}</p>
+
+              {brainstormState.planSteps.length > 0 && (
+                <div className="flex items-center gap-2 mt-3 pl-6">
+                  <span className="material-symbols-outlined text-green-500 text-xs">
+                    checklist
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    タスク数: {brainstormState.planSteps.length}件
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* アクションボタン */}
+          <div className="space-y-3">
+            <button
+              onClick={onSaveAsProject}
+              className="w-full py-3 px-4 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">save</span>
+              プロジェクトとして保存
+            </button>
+
+            <button
+              onClick={onExportMarkdown}
+              className="w-full py-3 px-4 rounded-lg border-2 border-border hover:bg-muted/50 font-medium text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">download</span>
+              Markdownでエクスポート
+            </button>
+
+            <button
+              onClick={onStartNew}
+              className="w-full py-2.5 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-base">refresh</span>
+              新しいブレインストーミングを始める
+            </button>
+          </div>
         </div>
       </div>
     </div>
