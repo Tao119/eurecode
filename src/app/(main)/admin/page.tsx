@@ -41,6 +41,7 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<OrganizationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
   useEffect(() => {
     async function fetchData() {
@@ -58,7 +59,22 @@ export default function AdminDashboardPage() {
         setLoading(false);
       }
     }
+    async function fetchPendingRequests() {
+      try {
+        const response = await fetch("/api/billing/credits/allocation/request");
+        const result = await response.json();
+        if (result.requests) {
+          const count = result.requests.filter(
+            (r: { status: string }) => r.status === "pending"
+          ).length;
+          setPendingRequestCount(count);
+        }
+      } catch {
+        // Silently ignore
+      }
+    }
     fetchData();
+    fetchPendingRequests();
   }, []);
 
   const stats = data
@@ -220,6 +236,37 @@ export default function AdminDashboardPage() {
           </Card>
         ))}
       </div>
+
+      {/* Pending Requests Alert */}
+      {pendingRequestCount > 0 && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-xl text-yellow-500">
+                    inbox
+                  </span>
+                </div>
+                <div>
+                  <p className="font-medium">
+                    {pendingRequestCount}件のポイントリクエスト
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    メンバーからのポイント割り当てリクエストがあります
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/admin/requests"
+                className="px-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30 text-sm font-medium transition-colors"
+              >
+                確認する
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Alerts */}
       {data && (data.alerts.inactiveMembers.length > 0 || data.alerts.lowTokenMembers.length > 0) && (

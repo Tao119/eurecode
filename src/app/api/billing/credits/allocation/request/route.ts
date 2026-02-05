@@ -177,7 +177,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { requestId, action, rejectionReason } = body;
+    const { requestId, action, adjustedPoints, rejectionReason } = body;
 
     if (!requestId || !action) {
       return NextResponse.json(
@@ -224,19 +224,14 @@ export async function PATCH(request: NextRequest) {
     const now = new Date();
 
     if (action === "approve") {
+      // 管理者が金額を調整可能（adjustedPoints が指定されていればそちらを使用）
+      const approvedPoints = adjustedPoints && adjustedPoints > 0
+        ? adjustedPoints
+        : allocationRequest.requestedPoints;
+
       // 承認：割り当てを作成
       const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-      // 既存の割り当てを取得
-      const existingAllocation = await prisma.creditAllocation.findFirst({
-        where: {
-          organizationId: admin.organizationId,
-          userId: allocationRequest.requesterId,
-          periodStart: { lte: now },
-          periodEnd: { gte: now },
-        },
-      });
 
       // 割り当てを追加または更新
       const allocation = await prisma.creditAllocation.upsert({
@@ -249,13 +244,13 @@ export async function PATCH(request: NextRequest) {
         },
         update: {
           allocatedPoints: {
-            increment: allocationRequest.requestedPoints,
+            increment: approvedPoints,
           },
         },
         create: {
           organizationId: admin.organizationId,
           userId: allocationRequest.requesterId,
-          allocatedPoints: allocationRequest.requestedPoints,
+          allocatedPoints: approvedPoints,
           usedPoints: 0,
           periodStart,
           periodEnd,
@@ -275,6 +270,7 @@ export async function PATCH(request: NextRequest) {
 
       return NextResponse.json({
         status: "approved",
+        approvedPoints,
         allocation,
       });
     } else {

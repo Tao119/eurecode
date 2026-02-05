@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -25,6 +25,11 @@ const adminNavItems = [
     icon: "group",
   },
   {
+    href: "/admin/requests",
+    label: "リクエスト",
+    icon: "inbox",
+  },
+  {
     href: "/admin/settings",
     label: "設定",
     icon: "settings",
@@ -39,6 +44,7 @@ export default function AdminLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -47,6 +53,25 @@ export default function AdminLayout({
       router.push("/");
     }
   }, [status, session, router]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    async function fetchPendingCount() {
+      try {
+        const response = await fetch("/api/billing/credits/allocation/request");
+        const data = await response.json();
+        if (data.requests) {
+          const count = data.requests.filter(
+            (r: { status: string }) => r.status === "pending"
+          ).length;
+          setPendingRequestCount(count);
+        }
+      } catch {
+        // Silently ignore
+      }
+    }
+    fetchPendingCount();
+  }, [status]);
 
   if (status === "loading") {
     return (
@@ -67,6 +92,8 @@ export default function AdminLayout({
         <nav className="p-4 space-y-1">
           {adminNavItems.map((item) => {
             const isActive = pathname === item.href;
+            const showBadge =
+              item.href === "/admin/requests" && pendingRequestCount > 0;
             return (
               <Link
                 key={item.href}
@@ -82,6 +109,11 @@ export default function AdminLayout({
                   {item.icon}
                 </span>
                 {item.label}
+                {showBadge && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {pendingRequestCount}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -93,12 +125,14 @@ export default function AdminLayout({
         <nav className="flex overflow-x-auto p-2 gap-1">
           {adminNavItems.map((item) => {
             const isActive = pathname === item.href;
+            const showBadge =
+              item.href === "/admin/requests" && pendingRequestCount > 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
+                  "relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -108,6 +142,11 @@ export default function AdminLayout({
                   {item.icon}
                 </span>
                 {item.label}
+                {showBadge && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1 py-0.5 rounded-full min-w-[1rem] text-center leading-none">
+                    {pendingRequestCount}
+                  </span>
+                )}
               </Link>
             );
           })}

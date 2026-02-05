@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -11,7 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Zap,
@@ -19,6 +21,8 @@ import {
   Users,
   ArrowRight,
   Sparkles,
+  Clock,
+  Send,
 } from "lucide-react";
 import {
   CREDIT_PACKS,
@@ -48,6 +52,11 @@ interface OutOfCreditsModalProps {
   isCompletelyOut?: boolean;
 }
 
+interface PendingRequestInfo {
+  requestedPoints: number;
+  createdAt: string;
+}
+
 export function OutOfCreditsModal({
   open,
   onOpenChange,
@@ -60,7 +69,57 @@ export function OutOfCreditsModal({
 }: OutOfCreditsModalProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"credits" | "upgrade">("credits");
+  const [activeTab, setActiveTab] = useState<"allocate" | "credits" | "upgrade">(
+    isOrganization && !isOrganizationMember ? "allocate" : "credits"
+  );
+
+  // メンバー用リクエストフォーム state
+  const [requestPoints, setRequestPoints] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [pendingRequestInfo, setPendingRequestInfo] = useState<PendingRequestInfo | null>(null);
+
+  // 管理者用: 保留リクエスト件数
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+
+  // モーダルが開いた時に保留リクエスト情報を取得
+  useEffect(() => {
+    if (!open) return;
+
+    if (isOrganizationMember) {
+      // メンバー: 自分の保留リクエストを確認
+      fetch("/api/billing/credits/allocation/request")
+        .then((res) => res.json())
+        .then((data) => {
+          const pending = data.requests?.find(
+            (r: { status: string }) => r.status === "pending"
+          );
+          if (pending) {
+            setHasPendingRequest(true);
+            setPendingRequestInfo({
+              requestedPoints: pending.requestedPoints,
+              createdAt: pending.createdAt,
+            });
+          } else {
+            setHasPendingRequest(false);
+            setPendingRequestInfo(null);
+          }
+        })
+        .catch(() => {});
+    } else if (isOrganization) {
+      // 管理者: 保留リクエスト件数を取得
+      fetch("/api/billing/credits/allocation/request")
+        .then((res) => res.json())
+        .then((data) => {
+          const count = data.requests?.filter(
+            (r: { status: string }) => r.status === "pending"
+          ).length || 0;
+          setPendingRequestCount(count);
+        })
+        .catch(() => {});
+    }
+  }, [open, isOrganizationMember, isOrganization]);
 
   const canPurchaseCredits = !isOrganizationMember;
   const canUpgrade = !isOrganization || (isOrganization && !isOrganizationMember);
@@ -121,8 +180,11 @@ export function OutOfCreditsModal({
       const data = await response.json();
       if (data.url) {
         window.location.href = data.url;
+      } else if (data.success) {
+        router.push("/settings/billing?success=true");
+        router.refresh();
       } else {
-        alert("決済ページの作成に失敗しました");
+        alert(data.errorJa || "決済ページの作成に失敗しました");
       }
     } catch (error) {
       console.error("Upgrade error:", error);
@@ -132,10 +194,43 @@ export function OutOfCreditsModal({
     }
   };
 
-  const handleRequestAllocation = () => {
-    router.push("/settings/credits/request");
-    onOpenChange(false);
-  };
+  const handleSubmitRequest = useCallback(async () => {
+    const points = parseFloat(requestPoints);
+    if (!points || points <= 0) {
+      toast.error("有効なポイント数を入力してください");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/billing/credits/allocation/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestedPoints: points,
+          reason: requestReason.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success("リクエストを送信しました");
+        setHasPendingRequest(true);
+        setPendingRequestInfo({
+          requestedPoints: points,
+          createdAt: new Date().toISOString(),
+        });
+        setRequestPoints("");
+        setRequestReason("");
+      } else {
+        toast.error(data.errorJa || data.error || "リクエストに失敗しました");
+      }
+    } catch {
+      toast.error("エラーが発生しました");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [requestPoints, requestReason]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -158,22 +253,80 @@ export function OutOfCreditsModal({
           </div>
         </DialogHeader>
 
-        {/* 組織メンバーの場合 */}
+        {/* 組織メンバーの場合: インラインリクエストフォーム */}
         {isOrganizationMember && (
           <div className="py-4">
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-              <h3 className="font-medium mb-2">ポイントをリクエストしてください</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                組織メンバーは直接クレジットを購入できません。
-                <br />
-                管理者にポイントの追加割り当てをリクエストしてください。
-              </p>
-              <Button onClick={handleRequestAllocation} className="w-full">
-                <Users className="h-4 w-4 mr-2" />
-                ポイントをリクエスト
-              </Button>
-            </div>
+            {hasPendingRequest && pendingRequestInfo ? (
+              <div className="bg-muted/50 rounded-lg p-4 text-center">
+                <Clock className="h-10 w-10 mx-auto mb-3 text-yellow-500" />
+                <h3 className="font-medium mb-1">リクエスト送信済み</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {pendingRequestInfo.requestedPoints.toLocaleString()} pt のリクエストを送信しました。
+                  <br />
+                  管理者の承認をお待ちください。
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  送信日時: {new Date(pendingRequestInfo.createdAt).toLocaleDateString("ja-JP", {
+                    month: "long",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-medium">管理者にポイントをリクエスト</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    リクエストするポイント数を入力してください。管理者が確認後、ポイントが追加されます。
+                  </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                        リクエストポイント数
+                      </label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="例: 100"
+                        value={requestPoints}
+                        onChange={(e) => setRequestPoints(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                        理由（任意）
+                      </label>
+                      <textarea
+                        value={requestReason}
+                        onChange={(e) => setRequestReason(e.target.value)}
+                        placeholder="ポイントが必要な理由..."
+                        className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleSubmitRequest}
+                      disabled={isSubmitting || !requestPoints}
+                      className="w-full"
+                    >
+                      {isSubmitting ? (
+                        <span className="material-symbols-outlined animate-spin text-base mr-2">
+                          progress_activity
+                        </span>
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      リクエストを送信
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -182,6 +335,20 @@ export function OutOfCreditsModal({
           <>
             {/* タブ切り替え */}
             <div className="flex border-b">
+              {/* 組織管理者のみ: ポイント割り振りタブ */}
+              {isOrganization && (
+                <button
+                  onClick={() => setActiveTab("allocate")}
+                  className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "allocate"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Users className="h-4 w-4 inline mr-1.5" />
+                  ポイント割り振り
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab("credits")}
                 className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -190,7 +357,7 @@ export function OutOfCreditsModal({
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <CreditCard className="h-4 w-4 inline mr-2" />
+                <CreditCard className="h-4 w-4 inline mr-1.5" />
                 クレジット購入
               </button>
               {nextPlanConfig && (
@@ -202,11 +369,48 @@ export function OutOfCreditsModal({
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Zap className="h-4 w-4 inline mr-2" />
-                  プランアップグレード
+                  <Zap className="h-4 w-4 inline mr-1.5" />
+                  プラン変更
                 </button>
               )}
             </div>
+
+            {/* ポイント割り振りタブ（組織管理者のみ） */}
+            {activeTab === "allocate" && isOrganization && (
+              <div className="py-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  メンバーへのポイント配分を調整して、ポイントを確保できます。
+                </p>
+
+                <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                  <Button
+                    onClick={() => {
+                      router.push("/admin/members");
+                      onOpenChange(false);
+                    }}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    メンバーのポイント配分を管理
+                  </Button>
+
+                  {pendingRequestCount > 0 && (
+                    <Button
+                      onClick={() => {
+                        router.push("/admin/requests");
+                        onOpenChange(false);
+                      }}
+                      variant="outline"
+                      className="w-full border-yellow-500/30 text-yellow-600 hover:bg-yellow-500/5"
+                    >
+                      <span className="material-symbols-outlined text-base mr-2">inbox</span>
+                      {pendingRequestCount}件のポイントリクエストを確認
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* クレジット購入タブ */}
             {activeTab === "credits" && (
