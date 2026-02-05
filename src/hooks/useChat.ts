@@ -712,7 +712,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         }
       }
     },
-    [mode, isLoading, onError, onTokensUsed, setMessages, conversationId, saveConversation, brainstormSubMode, generateTitle]
+    [mode, isLoading, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode, generateTitle, model]
   );
 
   const clearMessages = useCallback(() => {
