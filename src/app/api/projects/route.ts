@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         items: projectsWithStats,
@@ -204,6 +204,14 @@ export async function GET(request: NextRequest) {
         hasMore: offset + limit < total,
       },
     });
+
+    // Cache-Control: private（ユーザー固有のデータ）、60秒キャッシュ、stale-while-revalidate
+    response.headers.set(
+      "Cache-Control",
+      "private, max-age=60, stale-while-revalidate=300"
+    );
+
+    return response;
   } catch (error) {
     console.error("Get projects error:", error);
     return NextResponse.json(

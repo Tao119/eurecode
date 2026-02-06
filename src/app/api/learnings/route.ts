@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       prisma.learning.count({ where }),
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         items: learnings.map((learning: Learning) => ({
@@ -98,6 +98,14 @@ export async function GET(request: NextRequest) {
         hasMore: offset + learnings.length < total,
       },
     });
+
+    // Cache-Control: private（ユーザー固有のデータ）、60秒キャッシュ、stale-while-revalidate
+    response.headers.set(
+      "Cache-Control",
+      "private, max-age=60, stale-while-revalidate=300"
+    );
+
+    return response;
   } catch (error) {
     console.error("Get learnings error:", error);
     return NextResponse.json(

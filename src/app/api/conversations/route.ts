@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
       prisma.conversation.count({ where }),
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         items: conversations,
@@ -127,6 +127,14 @@ export async function GET(request: NextRequest) {
         hasMore: offset + limit < total,
       },
     });
+
+    // Cache-Control: private（ユーザー固有のデータ）、30秒キャッシュ、stale-while-revalidate
+    response.headers.set(
+      "Cache-Control",
+      "private, max-age=30, stale-while-revalidate=120"
+    );
+
+    return response;
   } catch (error) {
     console.error("Get conversations error:", error);
     return NextResponse.json(

@@ -32,6 +32,7 @@ export default function ExplanationRoomPage({ params }: PageProps) {
   const {
     messages,
     isLoading,
+    isLoadingHistory,
     sendMessage,
     stopGeneration,
     forkFromMessage,
@@ -84,6 +85,7 @@ export default function ExplanationRoomPage({ params }: PageProps) {
       mode="explanation"
       messages={messages}
       isLoading={isLoading}
+      isLoadingHistory={isLoadingHistory}
       onSendMessage={sendMessage}
       welcomeMessage="コードや技術的な概念について質問してください。わかりやすく解説します。"
       inputPlaceholder="コードを貼り付けるか、質問を入力してください..."

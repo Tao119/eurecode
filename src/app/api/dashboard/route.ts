@@ -176,7 +176,7 @@ export async function GET(request: Request) {
 
     const totalLearningMinutes = Object.values(dailyLearningTime).reduce((sum, mins) => sum + mins, 0);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         summary: {
@@ -193,6 +193,14 @@ export async function GET(request: Request) {
         period,
       },
     });
+
+    // Cache-Control: private（ユーザー固有のデータ）、120秒キャッシュ、stale-while-revalidate
+    response.headers.set(
+      "Cache-Control",
+      "private, max-age=120, stale-while-revalidate=600"
+    );
+
+    return response;
   } catch (error) {
     console.error("Dashboard API error:", error);
     return NextResponse.json(

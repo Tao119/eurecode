@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type {
   Project,
   ProjectWithStats,
@@ -15,6 +15,20 @@ import type {
 } from "@/types/project";
 import { isAuthError, handleAuthError } from "@/lib/auth-error-handler";
 
+// キャッシュ期間（ミリ秒）- 60秒間は再フェッチしない
+const PROJECTS_CACHE_DURATION = 60000;
+
+// モジュールレベルの共有キャッシュ
+interface ProjectsCache {
+  data: ProjectWithStats[];
+  total: number;
+  hasMore: boolean;
+  filters: string;
+  timestamp: number;
+}
+let globalProjectsCache: ProjectsCache | null = null;
+let globalProjectsFetching = false;
+
 interface UseProjectsOptions {
   initialLimit?: number;
   autoFetch?: boolean;
@@ -25,12 +39,16 @@ interface UseProjectsOptions {
 export function useProjects(options: UseProjectsOptions = {}) {
   const { initialLimit = 20, autoFetch = true, initialFilter = {}, onError } = options;
 
-  const [projects, setProjects] = useState<ProjectWithStats[]>([]);
+  const filtersKey = JSON.stringify(initialFilter);
+  const cachedData = globalProjectsCache?.filters === filtersKey ? globalProjectsCache : null;
+
+  const [projects, setProjects] = useState<ProjectWithStats[]>(cachedData?.data ?? []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(cachedData?.total ?? 0);
+  const [hasMore, setHasMore] = useState(cachedData?.hasMore ?? false);
   const [filters, setFiltersState] = useState<ProjectsFilter>(initialFilter);
+  const fetchingRef = useRef(false);
 
   const handleError = useCallback(
     (err: Error) => {
@@ -41,11 +59,33 @@ export function useProjects(options: UseProjectsOptions = {}) {
   );
 
   const fetchProjects = useCallback(
-    async (fetchOptions: { offset?: number; append?: boolean } = {}) => {
-      const { offset = 0, append = false } = fetchOptions;
+    async (fetchOptions: { offset?: number; append?: boolean; force?: boolean } = {}) => {
+      const { offset = 0, append = false, force = false } = fetchOptions;
+      const currentFiltersKey = JSON.stringify(filters);
+
+      // 重複フェッチを防止
+      if (fetchingRef.current || globalProjectsFetching) {
+        return;
+      }
+
+      // キャッシュが有効なら使用（forceがfalseで、offset=0でappendなしの場合のみ）
+      if (!force && offset === 0 && !append && globalProjectsCache) {
+        const now = Date.now();
+        if (
+          globalProjectsCache.filters === currentFiltersKey &&
+          now - globalProjectsCache.timestamp < PROJECTS_CACHE_DURATION
+        ) {
+          setProjects(globalProjectsCache.data);
+          setTotal(globalProjectsCache.total);
+          setHasMore(globalProjectsCache.hasMore);
+          return;
+        }
+      }
 
       setIsLoading(true);
       setError(null);
+      fetchingRef.current = true;
+      globalProjectsFetching = true;
 
       try {
         const params = new URLSearchParams();
@@ -68,16 +108,30 @@ export function useProjects(options: UseProjectsOptions = {}) {
           throw new Error(data.error?.message || "Failed to fetch projects");
         }
 
-        setProjects((prev) => (append ? [...prev, ...data.data.items] : data.data.items));
+        const newProjects = append ? [...projects, ...data.data.items] : data.data.items;
+        setProjects(newProjects);
         setTotal(data.data.total);
         setHasMore(data.data.hasMore);
+
+        // キャッシュを更新（最初のページのみ）
+        if (offset === 0 && !append) {
+          globalProjectsCache = {
+            data: data.data.items,
+            total: data.data.total,
+            hasMore: data.data.hasMore,
+            filters: currentFiltersKey,
+            timestamp: Date.now(),
+          };
+        }
       } catch (err) {
         handleError(err instanceof Error ? err : new Error("Unknown error"));
       } finally {
         setIsLoading(false);
+        fetchingRef.current = false;
+        globalProjectsFetching = false;
       }
     },
-    [initialLimit, filters, handleError]
+    [initialLimit, filters, handleError, projects]
   );
 
   const createProject = useCallback(
@@ -102,8 +156,18 @@ export function useProjects(options: UseProjectsOptions = {}) {
           throw new Error(result.error?.message || "Failed to create project");
         }
 
-        // Refetch to get stats
-        await fetchProjects();
+        // オプティミスティック更新: 新しいプロジェクトをローカル状態に追加
+        const newProject: ProjectWithStats = {
+          ...result.data,
+          _count: { tasks: 0 },
+          stats: { totalTasks: 0, completedTasks: 0, totalEstimatedMinutes: 0, totalActualMinutes: 0 },
+        };
+        setProjects((prev) => [newProject, ...prev]);
+        setTotal((prev) => prev + 1);
+
+        // キャッシュを無効化
+        globalProjectsCache = null;
+
         return result.data;
       } catch (err) {
         handleError(err instanceof Error ? err : new Error("Unknown error"));
@@ -112,7 +176,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
         setIsLoading(false);
       }
     },
-    [fetchProjects, handleError]
+    [handleError]
   );
 
   const updateProject = useCallback(
@@ -171,6 +235,9 @@ export function useProjects(options: UseProjectsOptions = {}) {
 
         setProjects((prev) => prev.filter((p) => p.id !== id));
         setTotal((prev) => prev - 1);
+
+        // キャッシュを無効化
+        globalProjectsCache = null;
 
         return true;
       } catch (err) {

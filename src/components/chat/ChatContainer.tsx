@@ -13,6 +13,8 @@ interface ChatContainerProps {
   mode: ChatMode;
   messages: Message[];
   isLoading: boolean;
+  /** 会話履歴のロード中かどうか */
+  isLoadingHistory?: boolean;
   onSendMessage: (message: string, attachments?: FileAttachment[]) => void;
   welcomeMessage?: string;
   inputPlaceholder?: string;
@@ -35,6 +37,7 @@ export function ChatContainer({
   mode,
   messages,
   isLoading,
+  isLoadingHistory = false,
   onSendMessage,
   welcomeMessage,
   inputPlaceholder,
@@ -129,7 +132,9 @@ export function ChatContainer({
 
       {/* Messages */}
       <div ref={containerRef} className="flex-1 overflow-y-auto min-h-0">
-        {messages.length === 0 ? (
+        {isLoadingHistory ? (
+          <ChatLoadingSkeleton />
+        ) : messages.length === 0 ? (
           <WelcomeScreen
             mode={mode}
             welcomeMessage={welcomeMessage}
@@ -331,6 +336,69 @@ function WelcomeScreen({
               <span className="flex-1">{suggestion.text}</span>
             </button>
           ))}
+        </div>
+
+        {/* Keyboard shortcuts hint */}
+        <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-border/50">
+          <p className="text-[10px] sm:text-xs text-muted-foreground text-center mb-2">
+            💡 ヒント
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-4 text-[10px] sm:text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[9px] font-mono">⌘/Ctrl + Enter</kbd>
+              <span>送信</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[9px] font-mono">Shift + Enter</kbd>
+              <span>改行</span>
+            </span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 text-center mt-2">
+            コードを貼り付けると自動で解析されます
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton component for loading state
+function ChatLoadingSkeleton() {
+  return (
+    <div className="mx-auto max-w-4xl pb-4 animate-pulse">
+      {/* User message skeleton */}
+      <div className="flex gap-4 px-4 py-6">
+        <div className="size-8 rounded-full bg-muted shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-16 bg-muted rounded" />
+          <div className="h-4 w-3/4 bg-muted rounded" />
+        </div>
+      </div>
+      {/* Assistant message skeleton */}
+      <div className="flex gap-4 px-4 py-6 bg-muted/30">
+        <div className="size-8 rounded-full bg-muted shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-20 bg-muted rounded" />
+          <div className="h-4 w-full bg-muted rounded" />
+          <div className="h-4 w-5/6 bg-muted rounded" />
+          <div className="h-4 w-2/3 bg-muted rounded" />
+        </div>
+      </div>
+      {/* User message skeleton */}
+      <div className="flex gap-4 px-4 py-6">
+        <div className="size-8 rounded-full bg-muted shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-16 bg-muted rounded" />
+          <div className="h-4 w-1/2 bg-muted rounded" />
+        </div>
+      </div>
+      {/* Assistant message skeleton */}
+      <div className="flex gap-4 px-4 py-6 bg-muted/30">
+        <div className="size-8 rounded-full bg-muted shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-20 bg-muted rounded" />
+          <div className="h-4 w-full bg-muted rounded" />
+          <div className="h-4 w-4/5 bg-muted rounded" />
         </div>
       </div>
     </div>
