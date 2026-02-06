@@ -132,13 +132,21 @@ function messagesToAnthropicFormat(messages: Array<{ role: "user" | "assistant";
   });
 }
 
+// Allowed file types for attachments
+const ALLOWED_FILE_TYPES = [
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "application/pdf", "text/plain", "text/markdown",
+] as const;
+
 const fileAttachmentSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.string(),
-  size: z.number(),
-  data: z.string().optional(),
-  previewUrl: z.string().optional(),
+  id: z.string().max(100),
+  name: z.string().max(255),
+  type: z.string().refine((t) => ALLOWED_FILE_TYPES.includes(t as typeof ALLOWED_FILE_TYPES[number]), {
+    message: "Unsupported file type",
+  }),
+  size: z.number().max(10_000_000), // 10MB max
+  data: z.string().max(20_000_000).optional(), // Base64 encoded, ~15MB
+  previewUrl: z.string().max(500).optional(),
 });
 
 const chatRequestSchema = z.object({
@@ -146,23 +154,23 @@ const chatRequestSchema = z.object({
   messages: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
-      content: z.string(),
-      attachments: z.array(fileAttachmentSchema).optional(),
+      content: z.string().max(100000), // 100KB max per message
+      attachments: z.array(fileAttachmentSchema).max(5).optional(), // Max 5 attachments
     })
-  ),
-  conversationId: z.string().optional(),
+  ).max(100), // Max 100 messages in context
+  conversationId: z.string().max(100).optional(),
   // 壁打ちモードのサブモード（casual/planning）
   brainstormSubMode: z.enum(["casual", "planning"]).optional(),
   // 生成モード: 現在アクティブなアーティファクトの情報
   activeArtifact: z.object({
-    id: z.string(),
-    title: z.string(),
-    language: z.string().optional(),
+    id: z.string().max(100),
+    title: z.string().max(200),
+    language: z.string().max(50).optional(),
   }).optional(),
   // Claude モデル選択
   model: z.enum(["opus", "sonnet", "haiku"]).optional(),
   // プロジェクトID（RAGコンテキスト注入用）
-  projectId: z.string().optional(),
+  projectId: z.string().max(100).optional(),
 });
 
 export async function POST(request: NextRequest) {

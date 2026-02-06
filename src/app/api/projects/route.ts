@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimiters, rateLimitErrorResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 import type { ProjectStatus, ProjectType, ProjectPhase } from "@/generated/prisma/client";
 
@@ -56,6 +57,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: { code: "UNAUTHORIZED", message: "認証が必要です" } },
         { status: 401 }
       );
+    }
+
+    // Rate limiting
+    const rateLimitResult = await rateLimiters.api(session.user.id);
+    if (!rateLimitResult.success) {
+      return rateLimitErrorResponse(rateLimitResult);
     }
 
     const body = await request.json();

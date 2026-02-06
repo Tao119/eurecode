@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRetentionCutoffDate } from "@/lib/retention";
+import { rateLimiters, rateLimitErrorResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 
 // メッセージスキーマ（メタデータを含む）
 const messageSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().max(100).optional(),
   role: z.enum(["user", "assistant"]),
-  content: z.string(),
-  timestamp: z.string().optional(),
-  metadata: z.any().optional(),
+  content: z.string().max(100000), // 100KB max per message
+  timestamp: z.string().max(50).optional(),
+  metadata: z.any().optional(), // JSON metadata (Prisma compatible)
 });
 
 // メタデータスキーマ（分岐・brainstorm状態を含む）
@@ -154,6 +155,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Rate limiting
+    const rateLimitResult = await rateLimiters.conversation(session.user.id);
+    if (!rateLimitResult.success) {
+      return rateLimitErrorResponse(rateLimitResult);
+    }
+
     const body = await request.json();
     const parsed = createConversationSchema.safeParse(body);
 
@@ -186,8 +193,8 @@ export async function POST(request: NextRequest) {
       data: {
         userId: session.user.id,
         mode,
-        messages,
-        metadata: metadata || undefined,
+        messages: messages as unknown as Prisma.InputJsonValue,
+        metadata: (metadata || undefined) as Prisma.InputJsonValue | undefined,
         title: generatedTitle,
         tokensConsumed: 0,
         projectId,
