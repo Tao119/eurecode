@@ -193,8 +193,10 @@ export async function POST(request: NextRequest) {
       data: {
         userId: session.user.id,
         mode,
-        messages: messages as unknown as Prisma.InputJsonValue,
-        metadata: (metadata || undefined) as Prisma.InputJsonValue | undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        messages: messages as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        metadata: (metadata || undefined) as any,
         title: generatedTitle,
         tokensConsumed: 0,
         projectId,
@@ -274,8 +276,10 @@ export async function PATCH(request: NextRequest) {
     const conversation = await prisma.conversation.update({
       where: { id },
       data: {
-        messages,
-        ...(metadata !== undefined && { metadata }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        messages: messages as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(metadata !== undefined && { metadata: metadata as any }),
         ...(title && { title }),
         ...(projectId !== undefined && { projectId }),
         ...(isOrganized !== undefined && { isOrganized }),
