@@ -43,7 +43,13 @@ export async function GET(request: Request) {
 
     const userId = session.user.id;
 
-    const [conversations, learnings, tokenUsage] = await Promise.all([
+    // 月初の日時を計算（Promise.all前に計算しておく）
+    const thisMonthStart = new Date();
+    thisMonthStart.setDate(1);
+    thisMonthStart.setHours(0, 0, 0, 0);
+
+    // 全クエリを並列実行してDBレイテンシーを最小化
+    const [conversations, learnings, tokenUsage, allLearnings, thisMonthLearnings] = await Promise.all([
       prisma.conversation.findMany({
         where: {
           userId,
@@ -78,22 +84,17 @@ export async function GET(request: Request) {
         },
         orderBy: { date: "asc" },
       }),
+      // カウントクエリも並列実行
+      prisma.learning.count({
+        where: { userId },
+      }),
+      prisma.learning.count({
+        where: {
+          userId,
+          createdAt: { gte: thisMonthStart },
+        },
+      }),
     ]);
-
-    const allLearnings = await prisma.learning.count({
-      where: { userId },
-    });
-
-    const thisMonthStart = new Date();
-    thisMonthStart.setDate(1);
-    thisMonthStart.setHours(0, 0, 0, 0);
-
-    const thisMonthLearnings = await prisma.learning.count({
-      where: {
-        userId,
-        createdAt: { gte: thisMonthStart },
-      },
-    });
 
     const dailyLearningTime: Record<string, number> = {};
     const modeUsage: Record<string, number> = {

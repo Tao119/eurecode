@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, createContext, useContext } from "react";
+import React, { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import { useSession } from "next-auth/react";
 import type { AIModel, IndividualPlan, OrganizationPlan } from "@/config/plans";
 
@@ -90,19 +90,47 @@ const defaultState: CreditState = {
   period: { start: new Date(), end: new Date() },
 };
 
+// キャッシュ期間（ミリ秒）- 30秒間は再フェッチしない
+const CACHE_DURATION = 30000;
+
+// モジュールレベルの共有キャッシュ（複数のuseCreditsインスタンス間で共有）
+let globalLastFetch = 0;
+let globalFetching = false;
+let globalCachedData: CreditState | null = null;
+
 export function useCredits(): UseCreditReturn {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated" && !!session;
-  const [state, setState] = useState<CreditState>(defaultState);
+  const [state, setState] = useState<CreditState>(globalCachedData ?? defaultState);
+  const lastFetchRef = useRef<number>(globalLastFetch);
+  const fetchingRef = useRef<boolean>(globalFetching);
 
-  const fetchCredits = useCallback(async () => {
+  const fetchCredits = useCallback(async (force = false) => {
     // 未認証の場合はフェッチしない
     if (!isAuthenticated) {
       setState((prev) => ({ ...prev, isLoading: false }));
       return;
     }
 
+    // 重複フェッチを防止（グローバルとローカル両方チェック）
+    if (fetchingRef.current || globalFetching) {
+      return;
+    }
+
+    // キャッシュ期間内なら再フェッチしない（forceがtrueの場合は除く）
+    const now = Date.now();
+    const lastFetchTime = Math.max(lastFetchRef.current, globalLastFetch);
+    if (!force && now - lastFetchTime < CACHE_DURATION) {
+      // グローバルキャッシュがあればそれを使用
+      if (globalCachedData && !state.isLoading) {
+        setState(globalCachedData);
+      }
+      return;
+    }
+
     try {
+      fetchingRef.current = true;
+      globalFetching = true;
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
       const response = await fetch("/api/billing/credits/balance");
@@ -113,7 +141,12 @@ export function useCredits(): UseCreditReturn {
 
       const data = await response.json();
 
-      setState({
+      // フェッチ成功時刻を記録（グローバルとローカル両方）
+      const fetchTime = Date.now();
+      lastFetchRef.current = fetchTime;
+      globalLastFetch = fetchTime;
+
+      const newState: CreditState = {
         isLoading: false,
         error: null,
         plan: data.plan,
@@ -131,7 +164,11 @@ export function useCredits(): UseCreditReturn {
           start: new Date(data.period.start),
           end: new Date(data.period.end),
         },
-      });
+      };
+
+      // グローバルキャッシュを更新
+      globalCachedData = newState;
+      setState(newState);
     } catch (error) {
       console.error("Failed to fetch credits:", error);
       setState((prev) => ({
@@ -139,6 +176,9 @@ export function useCredits(): UseCreditReturn {
         isLoading: false,
         error: error instanceof Error ? error.message : "Unknown error",
       }));
+    } finally {
+      fetchingRef.current = false;
+      globalFetching = false;
     }
   }, [isAuthenticated]);
 
