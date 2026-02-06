@@ -64,7 +64,7 @@ export function LearningStats() {
 }
 
 function ConsecutiveDaysCard({ days }: { days: number }) {
-  // Determine fire intensity based on streak
+  // Determine fire intensity based on streak (Duolingo-style progression)
   const getFireColor = () => {
     if (days >= 30) return "text-red-500";
     if (days >= 14) return "text-orange-500";
@@ -78,20 +78,47 @@ function ConsecutiveDaysCard({ days }: { days: number }) {
     return "";
   };
 
+  // Milestone messages
+  const getMilestoneMessage = () => {
+    if (days >= 30) return "1ヶ月継続中！";
+    if (days >= 14) return "2週間継続中！";
+    if (days >= 7) return "1週間継続中！";
+    if (days >= 3) return "いい調子！";
+    if (days >= 1) return "スタート！";
+    return "今日から始めよう";
+  };
+
+  const getBgGradient = () => {
+    if (days >= 7) return "bg-gradient-to-r from-orange-500/10 to-red-500/10";
+    if (days >= 3) return "bg-gradient-to-r from-yellow-500/10 to-orange-500/10";
+    return "";
+  };
+
   return (
-    <Card className="px-4 py-2 hover:bg-muted/50 transition-colors">
+    <Card className={`px-4 py-2 hover:bg-muted/50 transition-all ${getBgGradient()}`}>
       <div className="flex items-center gap-2">
-        <span
-          className={`material-symbols-outlined ${getFireColor()} ${getFireAnimation()}`}
-        >
-          local_fire_department
-        </span>
+        <div className="relative">
+          <span
+            className={`material-symbols-outlined text-2xl ${getFireColor()} ${getFireAnimation()}`}
+          >
+            local_fire_department
+          </span>
+          {days >= 7 && (
+            <span className="absolute -top-1 -right-1 size-3 bg-red-500 rounded-full border-2 border-background" />
+          )}
+        </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
             連続学習
           </span>
-          <span className="text-sm font-bold">
-            {days > 0 ? `${days} 日` : "0 日"}
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-lg font-bold leading-none">
+              {days}
+            </span>
+            <span className="text-xs text-muted-foreground">日</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground leading-tight">
+            {getMilestoneMessage()}
           </span>
         </div>
       </div>

@@ -267,24 +267,25 @@ function WelcomeScreen({
 }) {
   const config = MODE_CONFIG[mode];
 
-  const suggestions: Record<ChatMode, string[]> = {
+  // 具体的でアクション誘導的なサジェスチョン
+  const suggestions: Record<ChatMode, Array<{ text: string; icon: string }>> = {
     explanation: [
-      "このコードの動作を説明して",
-      "この関数は何をしている？",
-      "この構文の意味を教えて",
-      "このパターンを理解したい",
+      { text: "コードを貼り付けて解説を聞く", icon: "code" },
+      { text: "エラーメッセージを貼り付けて原因を探る", icon: "bug_report" },
+      { text: "async/await の使い方を理解したい", icon: "sync" },
+      { text: "配列メソッドの違いを教えて", icon: "format_list_numbered" },
     ],
     generation: [
-      "ログイン機能を実装したい",
-      "データをソートする関数を作りたい",
-      "APIからデータを取得したい",
-      "フォームのバリデーションを実装したい",
+      { text: "React でログインフォームを作りたい", icon: "login" },
+      { text: "Python で CSV ファイルを処理したい", icon: "description" },
+      { text: "REST API のエンドポイントを実装したい", icon: "api" },
+      { text: "データベースに接続するコードが欲しい", icon: "storage" },
     ],
     brainstorm: [
-      "データベース設計を相談したい",
-      "アーキテクチャの選択肢を知りたい",
-      "このエラーの原因を一緒に考えたい",
-      "コードレビューをお願いしたい",
+      { text: "新しいアプリのアイデアを整理したい", icon: "lightbulb" },
+      { text: "技術スタックの選定を相談したい", icon: "build" },
+      { text: "プロジェクトの設計を一緒に考えたい", icon: "architecture" },
+      { text: "機能の優先順位を決めたい", icon: "checklist" },
     ],
   };
 
@@ -311,20 +312,23 @@ function WelcomeScreen({
 
       <div className="w-full max-w-lg px-2">
         <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">
-          こんな質問から始めてみましょう:
+          クリックして始める:
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {suggestions[mode].map((suggestion, index) => (
             <button
               key={index}
-              onClick={() => onSuggestionClick?.(suggestion)}
+              onClick={() => onSuggestionClick?.(suggestion.text)}
               className={cn(
-                "text-left p-2.5 sm:p-3 rounded-lg border border-border bg-card transition-all text-xs sm:text-sm",
+                "flex items-center gap-3 text-left p-3 sm:p-4 rounded-lg border border-border bg-card transition-all text-xs sm:text-sm",
                 config.hoverBgColor,
-                "hover:border-primary/50 active:scale-[0.98]"
+                "hover:border-primary/50 hover:shadow-sm active:scale-[0.98]"
               )}
             >
-              {suggestion}
+              <span className={cn("material-symbols-outlined text-lg", config.color)}>
+                {suggestion.icon}
+              </span>
+              <span className="flex-1">{suggestion.text}</span>
             </button>
           ))}
         </div>
