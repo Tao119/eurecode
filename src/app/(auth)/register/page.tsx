@@ -473,15 +473,15 @@ function RegisterForm() {
                       checked={field.value}
                       onCheckedChange={field.onChange}
                       disabled={isLoading}
-                      className="mt-0.5"
+                      className="mt-0.5 shrink-0"
                     />
                   </FormControl>
-                  <div className="space-y-1 leading-normal">
+                  <div className="space-y-1 leading-relaxed min-w-0">
                     <FormLabel className="text-sm font-normal cursor-pointer">
-                      <Link href="/terms" target="_blank" className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>利用規約</Link>
-                      {" "}および{" "}
-                      <Link href="/privacy" target="_blank" className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>プライバシーポリシー</Link>
-                      {" "}に同意します
+                      <Link href="/terms" target="_blank" className="text-primary hover:underline whitespace-nowrap" onClick={(e) => e.stopPropagation()}>利用規約</Link>
+                      および
+                      <Link href="/privacy" target="_blank" className="text-primary hover:underline whitespace-nowrap" onClick={(e) => e.stopPropagation()}>プライバシーポリシー</Link>
+                      に同意します
                     </FormLabel>
                     <FormMessage />
                   </div>
