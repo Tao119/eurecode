@@ -235,6 +235,15 @@ export async function DELETE() {
       );
     }
 
+    // Members who joined via access key cannot leave on their own
+    // They must be removed by an administrator
+    if (currentUser.accessKey) {
+      return NextResponse.json(
+        { success: false, error: { code: "CANNOT_LEAVE", message: "招待キーで参加したメンバーは自分で組織を退出できません。管理者にお問い合わせください。" } },
+        { status: 403 }
+      );
+    }
+
     // Members without email cannot leave (they have nowhere to go)
     if (!currentUser.email) {
       return NextResponse.json(

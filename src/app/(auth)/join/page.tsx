@@ -205,11 +205,27 @@ export default function JoinPage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">招待キーで参加</CardTitle>
+        <CardTitle className="text-2xl font-bold flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">person_add</span>
+          招待キーで参加
+        </CardTitle>
         <CardDescription>
           管理者から発行されたアクセスキーを入力し、アカウントを作成してください
         </CardDescription>
       </CardHeader>
+
+      {/* 初回のみの説明 */}
+      <div className="mx-6 mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+        <div className="flex items-start gap-2">
+          <span className="material-symbols-outlined text-blue-500 text-lg shrink-0">info</span>
+          <div className="text-sm">
+            <p className="font-medium text-blue-500">招待キーは初回登録時のみ使用します</p>
+            <p className="text-muted-foreground text-xs mt-0.5">
+              アカウント作成後は、メールアドレスとパスワードでログインしてください。
+            </p>
+          </div>
+        </div>
+      </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
@@ -390,14 +406,19 @@ export default function JoinPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 w-full text-sm text-center">
-              <p className="text-muted-foreground">
-                既にアカウントをお持ちの方は{" "}
-                <Link href="/login" className="text-primary hover:underline">
-                  ログイン
+            <div className="flex flex-col gap-3 w-full text-sm">
+              {/* 既存ユーザー向け */}
+              <div className="p-3 bg-muted/50 rounded-lg text-center">
+                <p className="text-muted-foreground mb-1">
+                  <span className="material-symbols-outlined text-base align-middle mr-1">login</span>
+                  既にアカウントをお持ちの方
+                </p>
+                <Link href="/login" className="text-primary hover:underline font-medium">
+                  メールアドレスでログイン
                 </Link>
-              </p>
-              <p className="text-muted-foreground">
+              </div>
+
+              <p className="text-muted-foreground text-center">
                 個人で始める方は{" "}
                 <Link href="/register" className="text-primary hover:underline">
                   新規登録

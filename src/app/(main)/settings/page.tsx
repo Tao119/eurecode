@@ -532,7 +532,7 @@ export default function SettingsPage() {
               </div>
             </div>
           ) : isMember ? (
-            // Member user - show organization info and option to leave
+            // Member user - show organization info
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
                 <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -552,39 +552,46 @@ export default function SettingsPage() {
                 </span>
               </div>
 
-              {orgInfo?.accessKey && (
-                <div className="text-sm">
-                  <div>
-                    <p className="text-muted-foreground">アクセスキー</p>
-                    <p className="font-mono">{orgInfo.accessKey.keyCode}</p>
+              {/* 招待キーで参加したメンバーは退出不可 */}
+              {orgInfo?.accessKey ? (
+                <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-muted-foreground text-lg mt-0.5">info</span>
+                    <div>
+                      <p className="font-medium text-sm">組織メンバーとして登録されています</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        招待キーで参加したメンバーは、自分で組織から退出することはできません。
+                        退出が必要な場合は、組織の管理者にお問い合わせください。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-t pt-4">
+                  <div className="flex items-start gap-3">
+                    <div className="size-10 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive mt-0.5">
+                      <span className="material-symbols-outlined">logout</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">組織から退出する</p>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {session?.user.email
+                          ? "個人利用に切り替えます。組織のプラン特典は適用されなくなります。"
+                          : "メールアドレスが登録されていないため、退出できません。"}
+                      </p>
+                      <Button
+                        onClick={() => setShowLeaveDialog(true)}
+                        variant="outline"
+                        className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                        disabled={!session?.user.email}
+                      >
+                        <span className="material-symbols-outlined mr-2 text-lg">exit_to_app</span>
+                        組織から退出
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
-
-              <div className="border-t pt-4">
-                <div className="flex items-start gap-3">
-                  <div className="size-10 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive mt-0.5">
-                    <span className="material-symbols-outlined">logout</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">組織から退出する</p>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      {session?.user.email
-                        ? "個人利用に切り替えます。組織のプラン特典は適用されなくなります。"
-                        : "メールアドレスが登録されていないため、退出できません。"}
-                    </p>
-                    <Button
-                      onClick={() => setShowLeaveDialog(true)}
-                      variant="outline"
-                      className="border-destructive/50 text-destructive hover:bg-destructive/10"
-                      disabled={!session?.user.email}
-                    >
-                      <span className="material-symbols-outlined mr-2 text-lg">exit_to_app</span>
-                      組織から退出
-                    </Button>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : isAdmin ? (
             // Admin user - show info and option to convert to individual

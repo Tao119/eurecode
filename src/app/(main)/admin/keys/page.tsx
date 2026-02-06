@@ -244,7 +244,7 @@ export default function AccessKeysPage() {
   };
 
   const handleReissueKey = async (keyId: string) => {
-    if (!confirm("このキーを再発行しますか？\n\n既存のユーザーは新しいメールアドレスとパスワードで再登録する必要があります。")) return;
+    if (!confirm("このキーを再発行しますか？\n\n新しいキーが発行され、次のダイアログでコピーできます。")) return;
 
     setReissuing(keyId);
     try {
@@ -260,8 +260,12 @@ export default function AccessKeysPage() {
 
       const result = await response.json();
       if (result.success) {
+        // 再発行したキーを表示
+        if (result.data?.keyCode) {
+          setCreatedKeys([result.data.keyCode]);
+          setShowCreatedDialog(true);
+        }
         fetchKeys();
-        alert("キーを再発行しました。新しいメールアドレスとパスワードで登録できます。");
       } else {
         alert(result.error?.message || "再発行に失敗しました");
       }
@@ -669,18 +673,21 @@ export default function AccessKeysPage() {
                 <div key={key.id} className="p-3 border rounded-lg space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded truncate">
-                        {key.keyCode}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(key.keyCode)}
-                        className="p-1 hover:bg-muted rounded transition-colors cursor-pointer shrink-0"
-                        title="コピー"
-                      >
-                        <span className="material-symbols-outlined text-sm text-muted-foreground">
-                          content_copy
-                        </span>
-                      </button>
+                      {key.user ? (
+                        <div className="flex items-center gap-2">
+                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <span className="text-sm font-medium text-primary">
+                              {key.user.displayName.charAt(0)}
+                            </span>
+                          </div>
+                          <span className="font-medium truncate">{key.user.displayName}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <span className="material-symbols-outlined text-lg">hourglass_empty</span>
+                          <span className="text-sm">登録待ち</span>
+                        </div>
+                      )}
                     </div>
                     <span
                       className={cn(
@@ -692,12 +699,14 @@ export default function AccessKeysPage() {
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <div>
-                      <span className="text-xs text-muted-foreground">使用者</span>
-                      <p className="font-medium truncate">
-                        {key.user ? key.user.displayName : "-"}
-                      </p>
-                    </div>
+                    {key.user?.email && (
+                      <div className="col-span-2">
+                        <span className="text-xs text-muted-foreground">メール</span>
+                        <p className="font-medium truncate text-muted-foreground">
+                          {key.user.email}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <span className="text-xs text-muted-foreground">ポイント上限</span>
                       <p className="font-medium">{key.dailyTokenLimit.toLocaleString()}pt</p>
@@ -734,7 +743,8 @@ export default function AccessKeysPage() {
                         </Button>
                       </>
                     )}
-                    {(key.status === "used" || key.status === "revoked") && (
+                    {/* 再発行は revoked または expired のみ（used=参加済みは再発行不可） */}
+                    {(key.status === "revoked" || key.status === "expired") && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -765,19 +775,19 @@ export default function AccessKeysPage() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                    キーコード
+                    メンバー
                   </th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                     ステータス
-                  </th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                    使用者
                   </th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                     ポイント上限
                   </th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">
                     有効期限
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                    発行日
                   </th>
                   <th className="text-right py-3 px-4 font-medium text-muted-foreground">
                     操作
@@ -790,20 +800,26 @@ export default function AccessKeysPage() {
                   return (
                     <tr key={key.id} className="border-b border-border last:border-0">
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                            {key.keyCode}
-                          </code>
-                          <button
-                            onClick={() => copyToClipboard(key.keyCode)}
-                            className="p-1 hover:bg-muted rounded transition-colors cursor-pointer"
-                            title="コピー"
-                          >
-                            <span className="material-symbols-outlined text-sm text-muted-foreground">
-                              content_copy
-                            </span>
-                          </button>
-                        </div>
+                        {key.user ? (
+                          <div className="flex items-center gap-3">
+                            <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="text-sm font-medium text-primary">
+                                {key.user.displayName.charAt(0)}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium">{key.user.displayName}</p>
+                              {key.user.email && (
+                                <p className="text-xs text-muted-foreground">{key.user.email}</p>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className="material-symbols-outlined text-lg">hourglass_empty</span>
+                            <span className="text-sm">登録待ち</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span
@@ -816,18 +832,6 @@ export default function AccessKeysPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        {key.user ? (
-                          <div>
-                            <p className="font-medium">{key.user.displayName}</p>
-                            {key.user.email && (
-                              <p className="text-xs text-muted-foreground">{key.user.email}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
                         {key.dailyTokenLimit.toLocaleString()}pt
                       </td>
                       <td className="py-3 px-4">
@@ -836,6 +840,9 @@ export default function AccessKeysPage() {
                         ) : (
                           <span className="text-muted-foreground">無期限</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-muted-foreground">
+                        {new Date(key.createdAt).toLocaleDateString("ja-JP")}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -865,7 +872,8 @@ export default function AccessKeysPage() {
                               </Button>
                             </>
                           )}
-                          {(key.status === "used" || key.status === "revoked") && (
+                          {/* 再発行は revoked または expired のみ（used=参加済みは再発行不可） */}
+                          {(key.status === "revoked" || key.status === "expired") && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -986,12 +994,26 @@ export default function AccessKeysPage() {
       <Dialog open={showCreatedDialog} onOpenChange={setShowCreatedDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>キーを発行しました</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-green-500">check_circle</span>
+              キーを発行しました
+            </DialogTitle>
             <DialogDescription>
               以下のキーをメンバーに配布してください
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-4 max-h-64 overflow-y-auto">
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-2">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-amber-500 text-lg shrink-0">warning</span>
+              <div className="text-sm">
+                <p className="font-medium text-amber-500">このキーは今回のみ表示されます</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  セキュリティ上の理由から、発行後はキーを確認できません。必ずコピーして安全に保管してください。
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2 py-2 max-h-64 overflow-y-auto">
             {createdKeys.map((keyCode, index) => (
               <div
                 key={index}
@@ -1023,25 +1045,35 @@ export default function AccessKeysPage() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>アクセスキーを編集</DialogTitle>
+            <DialogTitle>メンバー設定を編集</DialogTitle>
             <DialogDescription>
-              {editingKey && (
-                <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                  {editingKey.keyCode}
-                </code>
-              )}
+              ポイント上限や有効期限を変更します
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {editingKey?.user && (
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">使用者</p>
-                <p className="font-medium">{editingKey.user.displayName}</p>
-                {editingKey.user.email && (
-                  <p className="text-sm text-muted-foreground">{editingKey.user.email}</p>
-                )}
-              </div>
-            )}
+            {/* メンバー情報 */}
+            <div className="p-3 bg-muted rounded-lg">
+              {editingKey?.user ? (
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <span className="text-lg font-medium text-primary">
+                      {editingKey.user.displayName.charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium">{editingKey.user.displayName}</p>
+                    {editingKey.user.email && (
+                      <p className="text-sm text-muted-foreground">{editingKey.user.email}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <span className="material-symbols-outlined">hourglass_empty</span>
+                  <span>登録待ちのキー</span>
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="editCreditLimit">月間ポイント上限</Label>
               <Input
