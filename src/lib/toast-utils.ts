@@ -158,17 +158,54 @@ export const toastPresets = {
     showSuccess("コピーしました");
   },
 
-  networkError: () => showError("ネットワークエラーが発生しました", {
-    description: "インターネット接続を確認してください",
-  }),
+  networkError: (onRetry?: () => void) =>
+    showError("ネットワークエラーが発生しました", {
+      description: "インターネット接続を確認してください",
+      duration: 8000,
+      action: onRetry
+        ? {
+            label: "再試行",
+            onClick: onRetry,
+          }
+        : undefined,
+    }),
 
-  sessionExpired: () => showWarning("セッションが切れました", {
-    description: "再度ログインしてください",
-    action: {
-      label: "ログイン",
-      onClick: () => window.location.href = "/login",
-    },
-  }),
+  sessionExpired: () =>
+    showWarning("セッションが切れました", {
+      description: "再度ログインしてください",
+      action: {
+        label: "ログイン",
+        onClick: () => (window.location.href = "/login"),
+      },
+    }),
+
+  chatError: (onRetry?: () => void) =>
+    showError("メッセージの送信に失敗しました", {
+      description: "もう一度お試しください",
+      duration: 8000,
+      action: onRetry
+        ? {
+            label: "再送信",
+            onClick: onRetry,
+          }
+        : undefined,
+    }),
+
+  rateLimited: () =>
+    showWarning("リクエスト制限に達しました", {
+      description: "しばらく待ってからお試しください",
+      duration: 10000,
+    }),
+
+  outOfCredits: () =>
+    showError("クレジットが不足しています", {
+      description: "プランをアップグレードするか、クレジットを購入してください",
+      duration: 10000,
+      action: {
+        label: "購入",
+        onClick: () => (window.location.href = "/settings/billing"),
+      },
+    }),
 };
 
 /**
