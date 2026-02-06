@@ -1,29 +1,10 @@
-"use client";
-
-import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ModeCard } from "@/components/common/ModeCard";
-import { LearningStats } from "@/components/common/LearningStats";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { FullPageLoading } from "@/components/common/LoadingSpinner";
-import { RecentLearningsSection } from "@/components/learnings/RecentLearnings";
-import { RecentConversationsSection } from "@/components/conversations/RecentConversations";
-import { useUserSettings } from "@/contexts/UserSettingsContext";
 
+// Landing page - always visible regardless of auth status (for SEO)
 export default function HomePage() {
-  const { data: session, status } = useSession();
-
-  if (status === "loading") {
-    return <FullPageLoading />;
-  }
-
-  // Logged in user dashboard
-  if (session) {
-    return <LoggedInDashboard displayName={session.user.displayName} />;
-  }
-
-  // Landing page for non-logged in users
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -160,48 +141,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function LoggedInDashboard({ displayName }: { displayName: string }) {
-  const { allowedModes } = useUserSettings();
-
-  return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-      {/* Welcome Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 sm:gap-4 mb-6 sm:mb-10">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-bold text-foreground mb-1 sm:mb-2">
-            おかえりなさい, {displayName}さん
-          </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            今日も新しいスキルを身につけましょう。
-          </p>
-        </div>
-        <LearningStats />
-      </div>
-
-      {/* Mode Selection */}
-      <section className="mb-6 sm:mb-10">
-        <h2 className="text-base sm:text-xl font-bold text-foreground mb-3 sm:mb-5 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-xl sm:text-2xl">
-            grid_view
-          </span>
-          学習モードを選択
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-          <ModeCard mode="explanation" disabled={!allowedModes.includes("explanation")} />
-          <ModeCard mode="generation" disabled={!allowedModes.includes("generation")} />
-          <ModeCard mode="brainstorm" disabled={!allowedModes.includes("brainstorm")} />
-        </div>
-      </section>
-
-      {/* Recent Conversations */}
-      <RecentConversationsSection />
-
-      {/* Recent Learnings */}
-      <RecentLearningsSection />
     </div>
   );
 }

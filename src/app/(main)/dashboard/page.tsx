@@ -148,10 +148,10 @@ function LearningTimeChart({ data }: { data: Array<{ date: string; minutes: numb
         <CardDescription>日別の学習時間（分）</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
+        <div className="h-[300px]" role="img" aria-label={chartData.length > 0 ? `日別学習時間グラフ: ${chartData.map(d => `${d.name}: ${d.minutes}分`).join(", ")}` : "データがありません"}>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
+              <BarChart data={chartData} aria-hidden="true">
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="name"
@@ -182,7 +182,7 @@ function LearningTimeChart({ data }: { data: Array<{ date: string; minutes: numb
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <span className="material-symbols-outlined text-4xl mb-2">bar_chart</span>
+                <span className="material-symbols-outlined text-4xl mb-2" aria-hidden="true">bar_chart</span>
                 <p>データがありません</p>
               </div>
             </div>
@@ -208,10 +208,10 @@ function UnderstandingRadarChart({
         <CardDescription>トピック別の理解度</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
+        <div className="h-[300px]" role="img" aria-label={data.length > 0 && data.some((d) => d.value > 0) ? `トピック別理解度レーダーチャート: ${data.map(d => `${d.subject}: ${d.value}%`).join(", ")}` : "学習データを蓄積中"}>
           {data.length > 0 && data.some((d) => d.value > 0) ? (
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
+              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data} aria-hidden="true">
                 <PolarGrid className="stroke-muted" />
                 <PolarAngleAxis
                   dataKey="subject"
@@ -242,7 +242,7 @@ function UnderstandingRadarChart({
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <span className="material-symbols-outlined text-4xl mb-2">radar</span>
+                <span className="material-symbols-outlined text-4xl mb-2" aria-hidden="true">radar</span>
                 <p>学習データを蓄積中</p>
               </div>
             </div>
@@ -264,10 +264,10 @@ function EstimationAccuracyChart({
   }));
 
   return (
-    <div className="h-[300px]">
+    <div className="h-[300px]" role="img" aria-label={chartData.length > 0 ? `見積もり精度グラフ: ${chartData.map(d => `${d.name}: 予測${d.predicted}分, 実績${d.actual}分`).join(", ")}` : "見積もりデータがありません"}>
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
+          <LineChart data={chartData} aria-hidden="true">
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis
               dataKey="name"
@@ -308,7 +308,7 @@ function EstimationAccuracyChart({
       ) : (
         <div className="h-full flex items-center justify-center text-muted-foreground">
           <div className="text-center">
-            <span className="material-symbols-outlined text-4xl mb-2">timeline</span>
+            <span className="material-symbols-outlined text-4xl mb-2" aria-hidden="true">timeline</span>
             <p>見積もりデータがありません</p>
             <p className="text-xs mt-1">生成モードで見積もり訓練を行うと表示されます</p>
           </div>
@@ -382,12 +382,20 @@ function RelatedChatsCard({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+          <div className="space-y-2" aria-label="読み込み中">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                <div className="w-8 h-8 rounded bg-muted" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-3 bg-muted rounded w-1/3" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : conversations.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <span className="material-symbols-outlined text-3xl mb-2">forum</span>
+            <span className="material-symbols-outlined text-3xl mb-2" aria-hidden="true">forum</span>
             <p className="text-sm">まだ会話がありません</p>
           </div>
         ) : (
@@ -481,8 +489,8 @@ function SelfSolveRateCard({ rate }: { rate: number }) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col items-center justify-center py-4">
-          <div className="relative w-32 h-32">
-            <svg className="w-32 h-32 transform -rotate-90">
+          <div className="relative w-32 h-32" role="img" aria-label={`自力解決率: ${rate}%`}>
+            <svg className="w-32 h-32 transform -rotate-90" aria-hidden="true">
               <circle
                 cx="64"
                 cy="64"
@@ -606,7 +614,7 @@ export default function DashboardPage() {
           )}
 
           {/* Period Selector */}
-          <div className="flex gap-2 bg-muted p-1 rounded-lg">
+          <div className="flex gap-2 bg-muted p-1 rounded-lg" role="tablist" aria-label="表示期間">
             {(["week", "month", "all"] as PeriodType[]).map((p) => (
               <Button
                 key={p}
@@ -614,6 +622,8 @@ export default function DashboardPage() {
                 size="sm"
                 onClick={() => setPeriod(p)}
                 className="min-w-[60px]"
+                role="tab"
+                aria-selected={period === p}
               >
                 {periodLabels[p]}
               </Button>

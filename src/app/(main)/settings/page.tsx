@@ -777,8 +777,12 @@ export default function SettingsPage() {
           </DialogHeader>
 
           <div className="py-4">
-            <Label className="mb-3 block">アクセスキー</Label>
-            <div className="flex gap-2 items-center justify-center">
+            <Label className="mb-3 block" id="access-key-label">アクセスキー</Label>
+            <div
+              className="flex gap-2 items-center justify-center"
+              role="group"
+              aria-labelledby="access-key-label"
+            >
               {accessKeyInput.map((value, index) => (
                 <div key={index} className="flex items-center">
                   <Input
@@ -787,14 +791,17 @@ export default function SettingsPage() {
                     onChange={(e) => handleAccessKeyChange(index, e.target.value)}
                     onPaste={index === 0 ? handleAccessKeyPaste : undefined}
                     placeholder="XXXXX"
+                    aria-label={`アクセスキー ${index + 1}番目の5文字`}
                     className="w-20 text-center font-mono tracking-wider uppercase"
                     maxLength={5}
+                    autoComplete="off"
+                    autoFocus={index === 0}
                   />
-                  {index < 3 && <span className="mx-1 text-muted-foreground">-</span>}
+                  {index < 3 && <span className="mx-1 text-muted-foreground" aria-hidden="true">-</span>}
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground text-center mt-3">
+            <p className="text-xs text-muted-foreground text-center mt-3" aria-describedby="access-key-label">
               例: AB1C2-DE3F4-GH5I6-JK7L8
             </p>
           </div>
@@ -928,9 +935,11 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => setShowPasswords(!showPasswords)}
-                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                aria-pressed={showPasswords}
+                aria-label={showPasswords ? "パスワードを隠す" : "パスワードを表示"}
+                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md px-2 py-1"
               >
-                <span className="material-symbols-outlined text-lg">
+                <span className="material-symbols-outlined text-lg" aria-hidden="true">
                   {showPasswords ? "visibility_off" : "visibility"}
                 </span>
                 {showPasswords ? "パスワードを隠す" : "パスワードを表示"}
@@ -992,7 +1001,11 @@ export default function SettingsPage() {
                 id="deleteHistoryConfirm"
                 value={deleteHistoryConfirm}
                 onChange={(e) => setDeleteHistoryConfirm(e.target.value)}
+                onPaste={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
                 placeholder="履歴を削除する"
+                autoComplete="off"
+                autoFocus
               />
             </div>
           </div>
@@ -1054,7 +1067,11 @@ export default function SettingsPage() {
                 id="deleteAccountConfirm"
                 value={deleteAccountConfirm}
                 onChange={(e) => setDeleteAccountConfirm(e.target.value)}
+                onPaste={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
                 placeholder="アカウントを削除する"
+                autoComplete="off"
+                autoFocus
               />
             </div>
           </div>

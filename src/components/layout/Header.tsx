@@ -22,10 +22,11 @@ interface NavItem {
   label: string;
   icon: string;
   adminOnly?: boolean;
+  guestOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "ホーム", icon: "home" },
+  { href: "/", label: "ホーム", icon: "home", guestOnly: true },
   { href: "/projects", label: "プロジェクト", icon: "folder_open" },
   { href: "/history", label: "学習履歴", icon: "history" },
   { href: "/dashboard", label: "ダッシュボード", icon: "insights" },
@@ -48,9 +49,13 @@ export function Header() {
     return pathname.startsWith(href);
   };
 
-  const filteredNavItems = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || session?.user.userType === "admin"
-  );
+  const filteredNavItems = NAV_ITEMS.filter((item) => {
+    // Hide admin-only items for non-admins
+    if (item.adminOnly && session?.user.userType !== "admin") return false;
+    // Hide guest-only items for logged-in users
+    if (item.guestOnly && session) return false;
+    return true;
+  });
 
   return (
     <>
@@ -71,8 +76,8 @@ export function Header() {
               </button>
             )}
 
-            {/* Logo */}
-            <Logo size="sm" href={session ? "/" : "/"} />
+            {/* Logo - dashboard for logged in users, LP for guests */}
+            <Logo size="sm" href={session ? "/dashboard" : "/"} />
           </div>
 
           {/* Center: Navigation (Desktop) */}

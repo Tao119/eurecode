@@ -106,7 +106,7 @@ export default function ProjectsPage() {
       {/* Search and Filters */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg" aria-hidden="true">
             search
           </span>
           <Input
@@ -115,14 +115,17 @@ export default function ProjectsPage() {
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
+            aria-label="プロジェクトを検索"
           />
         </div>
 
-        <div className="flex gap-2 bg-muted p-1 rounded-lg">
+        <div className="flex gap-2 bg-muted p-1 rounded-lg" role="tablist" aria-label="ステータスフィルター">
           <Button
             variant={statusFilter === null ? "default" : "ghost"}
             size="sm"
             onClick={() => handleStatusFilter(null)}
+            role="tab"
+            aria-selected={statusFilter === null}
           >
             すべて
           </Button>
@@ -134,8 +137,10 @@ export default function ProjectsPage() {
                 size="sm"
                 onClick={() => handleStatusFilter(status)}
                 className="gap-1"
+                role="tab"
+                aria-selected={statusFilter === status}
               >
-                <span className={cn("material-symbols-outlined text-base", config.color)}>
+                <span className={cn("material-symbols-outlined text-base", config.color)} aria-hidden="true">
                   {config.icon}
                 </span>
                 {config.label}
@@ -164,7 +169,7 @@ export default function ProjectsPage() {
           {projects.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <span className="material-symbols-outlined text-5xl text-muted-foreground mb-4">
+                <span className="material-symbols-outlined text-5xl text-muted-foreground mb-4" aria-hidden="true">
                   folder_off
                 </span>
                 <h3 className="font-medium text-lg mb-2">プロジェクトがありません</h3>
@@ -269,8 +274,9 @@ function ProjectCard({
               size="icon-sm"
               onClick={onDelete}
               className="text-muted-foreground hover:text-destructive"
+              aria-label={`${project.title}を削除`}
             >
-              <span className="material-symbols-outlined text-lg">delete</span>
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
             </Button>
           </div>
         </CardHeader>
@@ -285,7 +291,14 @@ function ProjectCard({
                   {completedTasks}/{totalTasks} ({Math.round(progress)}%)
                 </span>
               </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-1.5 bg-muted rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(progress)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`タスク進捗: ${completedTasks}/${totalTasks}完了`}
+              >
                 <div
                   className="h-full bg-primary rounded-full transition-all"
                   style={{ width: `${progress}%` }}

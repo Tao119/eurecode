@@ -184,7 +184,7 @@ export default function JoinPage() {
         return;
       }
 
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch (error) {
       // ネットワークエラーやサーバーエラーの詳細を表示
