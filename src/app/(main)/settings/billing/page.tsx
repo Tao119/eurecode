@@ -385,7 +385,7 @@ function BillingPageContent() {
               <PricingTable
                 currentPlan={subscription?.plan || "free"}
                 isOrganization={subscription?.planType === "organization"}
-                showOrganizationPlans={false}
+                showOrganizationPlans={subscription?.planType === "organization"}
               />
             </CardContent>
           </Card>
