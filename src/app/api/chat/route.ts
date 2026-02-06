@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limiting
-    const rateLimitResult = rateLimiters.chat(session.user.id);
+    const rateLimitResult = await rateLimiters.chat(session.user.id);
     if (!rateLimitResult.success) {
       return rateLimitErrorResponse(rateLimitResult);
     }

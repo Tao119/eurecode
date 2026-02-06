@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import { ErrorMonitorInit } from "@/components/common/ErrorMonitorInit";
 import {
   WebsiteJsonLd,
   OrganizationJsonLd,
@@ -108,6 +109,7 @@ export default function RootLayout({
         <SessionProvider>
           {children}
           <Toaster />
+          <ErrorMonitorInit />
         </SessionProvider>
         <WebsiteJsonLd
           url={siteUrl}

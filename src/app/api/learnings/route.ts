@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limiting
-    const rateLimitResult = rateLimiters.learning(session.user.id);
+    const rateLimitResult = await rateLimiters.learning(session.user.id);
     if (!rateLimitResult.success) {
       return rateLimitErrorResponse(rateLimitResult);
     }
