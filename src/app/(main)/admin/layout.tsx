@@ -86,9 +86,9 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)]">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card/50 hidden md:block">
+    <div className="flex flex-col md:flex-row min-h-[calc(100vh-4rem)]">
+      {/* Sidebar - Desktop only */}
+      <aside className="w-64 border-r border-border bg-card/50 hidden md:block shrink-0">
         <nav className="p-4 space-y-1">
           {adminNavItems.map((item) => {
             const isActive = pathname === item.href;
@@ -120,8 +120,8 @@ export default function AdminLayout({
         </nav>
       </aside>
 
-      {/* Mobile nav */}
-      <div className="md:hidden border-b border-border bg-card/50 w-full">
+      {/* Mobile nav - Mobile only */}
+      <div className="md:hidden border-b border-border bg-card/50 shrink-0">
         <nav className="flex overflow-x-auto p-2 gap-1">
           {adminNavItems.map((item) => {
             const isActive = pathname === item.href;
@@ -154,7 +154,7 @@ export default function AdminLayout({
       </div>
 
       {/* Main content */}
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 p-4 md:p-6 overflow-auto">{children}</main>
     </div>
   );
 }
