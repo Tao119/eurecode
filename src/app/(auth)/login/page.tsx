@@ -64,7 +64,7 @@ function LoginFormSkeleton() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const callbackUrl = searchParams.get("callbackUrl") || "/home";
   const error = searchParams.get("error");
 
   const [isLoading, setIsLoading] = useState(false);

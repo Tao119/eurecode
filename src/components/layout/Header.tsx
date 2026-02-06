@@ -22,15 +22,41 @@ interface NavItem {
   label: string;
   icon: string;
   adminOnly?: boolean;
-  guestOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "ホーム", icon: "home", guestOnly: true },
+  { href: "/home", label: "ホーム", icon: "home" },
   { href: "/projects", label: "プロジェクト", icon: "folder_open" },
   { href: "/history", label: "学習履歴", icon: "history" },
-  { href: "/dashboard", label: "ダッシュボード", icon: "insights" },
+  { href: "/dashboard", label: "統計", icon: "insights" },
   { href: "/admin", label: "管理", icon: "admin_panel_settings", adminOnly: true },
+];
+
+const CHAT_MODES = [
+  {
+    href: "/chat/brainstorm",
+    label: "壁打ち",
+    description: "アイデアを整理・深掘り",
+    icon: "lightbulb",
+    color: "text-purple-400",
+    bgColor: "bg-purple-500/10 hover:bg-purple-500/20",
+  },
+  {
+    href: "/chat/explanation",
+    label: "解説",
+    description: "コードの理解を深める",
+    icon: "school",
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/10 hover:bg-blue-500/20",
+  },
+  {
+    href: "/chat/generation",
+    label: "生成",
+    description: "コードを一緒に作成",
+    icon: "code",
+    color: "text-yellow-400",
+    bgColor: "bg-yellow-500/10 hover:bg-yellow-500/20",
+  },
 ];
 
 export function Header() {
@@ -45,15 +71,13 @@ export function Header() {
   }, []);
 
   const isActive = (href: string) => {
+    if (href === "/home") return pathname === "/home";
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   };
 
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    // Hide admin-only items for non-admins
     if (item.adminOnly && session?.user.userType !== "admin") return false;
-    // Hide guest-only items for logged-in users
-    if (item.guestOnly && session) return false;
     return true;
   });
 
@@ -77,8 +101,8 @@ export function Header() {
               </button>
             )}
 
-            {/* Logo - dashboard for logged in users, LP for guests */}
-            <Logo size="sm" href={session ? "/dashboard" : "/"} />
+            {/* Logo - /home for logged in users, / (LP) for guests */}
+            <Logo size="sm" href={session ? "/home" : "/"} />
           </div>
 
           {/* Center: Navigation (Desktop) */}
@@ -111,6 +135,41 @@ export function Header() {
               <div className="h-8 w-8 bg-muted animate-pulse rounded-full" />
             ) : session ? (
               <>
+                {/* New Chat Button - Quick Action */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="gap-1.5 shadow-sm">
+                      <span className="material-symbols-outlined text-[18px]">add</span>
+                      <span className="hidden sm:inline">新規チャット</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <div className="px-2 py-1.5 border-b border-border mb-1">
+                      <p className="text-sm font-medium">チャットを開始</p>
+                      <p className="text-xs text-muted-foreground">学習モードを選択</p>
+                    </div>
+                    {CHAT_MODES.map((mode) => (
+                      <DropdownMenuItem key={mode.href} asChild>
+                        <Link
+                          href={mode.href}
+                          className={cn(
+                            "flex items-center gap-3 px-2 py-2 cursor-pointer rounded-lg",
+                            mode.bgColor
+                          )}
+                        >
+                          <span className={cn("material-symbols-outlined text-xl", mode.color)}>
+                            {mode.icon}
+                          </span>
+                          <div className="flex-1">
+                            <p className={cn("text-sm font-medium", mode.color)}>{mode.label}</p>
+                            <p className="text-xs text-muted-foreground">{mode.description}</p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 {/* Credit Counter (Desktop only) */}
                 <div className="hidden lg:block">
                   <CreditCounter size="sm" />
@@ -149,7 +208,6 @@ export function Header() {
                           組織メンバー
                         </p>
                       )}
-                      {/* プラン表示 - メンバーには非表示 */}
                       {!credits.isOrganizationMember && (
                         <Link
                           href="/settings/billing"
@@ -167,7 +225,14 @@ export function Header() {
                       <CreditCounter size="sm" showLink={false} />
                     </div>
 
-                    {/* プラン・請求 - メンバーには非表示 */}
+                    <DropdownMenuItem asChild>
+                      <Link href="/home" className="cursor-pointer">
+                        <span className="material-symbols-outlined mr-2 text-[18px]">
+                          home
+                        </span>
+                        ホーム
+                      </Link>
+                    </DropdownMenuItem>
                     {!credits.isOrganizationMember && (
                       <DropdownMenuItem asChild>
                         <Link href="/settings/billing" className="cursor-pointer">
@@ -256,6 +321,31 @@ export function Header() {
               </div>
             </div>
 
+            {/* Quick Actions - Mobile */}
+            <div className="p-3 border-b border-border">
+              <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                チャットを開始
+              </p>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {CHAT_MODES.map((mode) => (
+                  <Link
+                    key={mode.href}
+                    href={mode.href}
+                    onClick={closeMobileMenu}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-xl active:scale-[0.98] transition-all",
+                      mode.bgColor
+                    )}
+                  >
+                    <span className={cn("material-symbols-outlined text-2xl", mode.color)}>
+                      {mode.icon}
+                    </span>
+                    <span className={cn("text-xs font-medium", mode.color)}>{mode.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
             {/* Navigation */}
             <nav className="p-3 space-y-1">
               <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -282,39 +372,6 @@ export function Header() {
               ))}
             </nav>
 
-            {/* Quick Actions */}
-            <div className="p-3 border-t border-border">
-              <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                クイックスタート
-              </p>
-              <div className="grid grid-cols-3 gap-2 mt-1">
-                <Link
-                  href="/chat/brainstorm"
-                  onClick={closeMobileMenu}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 active:scale-[0.98] transition-all"
-                >
-                  <span className="material-symbols-outlined text-2xl">lightbulb</span>
-                  <span className="text-xs font-medium">壁打ち</span>
-                </Link>
-                <Link
-                  href="/chat/explanation"
-                  onClick={closeMobileMenu}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 active:scale-[0.98] transition-all"
-                >
-                  <span className="material-symbols-outlined text-2xl">school</span>
-                  <span className="text-xs font-medium">解説</span>
-                </Link>
-                <Link
-                  href="/chat/generation"
-                  onClick={closeMobileMenu}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 active:scale-[0.98] transition-all"
-                >
-                  <span className="material-symbols-outlined text-2xl">code</span>
-                  <span className="text-xs font-medium">生成</span>
-                </Link>
-              </div>
-            </div>
-
             {/* Settings & Logout */}
             <div className="p-3 border-t border-border">
               <Link
@@ -325,7 +382,6 @@ export function Header() {
                 <span className="material-symbols-outlined text-xl">settings</span>
                 設定
               </Link>
-              {/* プラン・請求 - メンバーには非表示 */}
               {!credits.isOrganizationMember && (
                 <Link
                   href="/settings/billing"

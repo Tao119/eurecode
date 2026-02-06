@@ -74,8 +74,8 @@ function RegisterSuccessContent() {
               });
 
               if (signInResult?.ok) {
-                // ログイン成功、ダッシュボードへリダイレクト
-                router.push("/dashboard");
+                // ログイン成功、ホームへリダイレクト
+                router.push("/home");
                 return;
               } else {
                 // 自動ログイン失敗、手動ログインを促す

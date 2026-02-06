@@ -50,7 +50,7 @@ export default function AdminLayout({
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/admin");
     } else if (status === "authenticated" && session?.user.userType !== "admin") {
-      router.push("/dashboard");
+      router.push("/home");
     }
   }, [status, session, router]);
 
