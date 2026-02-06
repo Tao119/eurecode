@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import type { ChatMode } from "@/types/chat";
 
 interface Project {
@@ -50,8 +51,20 @@ export default function HistoryPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<ChatMode | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [linkingConversationId, setLinkingConversationId] = useState<string | null>(null);
+
+  // Filter conversations by search query
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const query = searchQuery.toLowerCase();
+    return conversations.filter(
+      (c) =>
+        c.title?.toLowerCase().includes(query) ||
+        c.project?.title?.toLowerCase().includes(query)
+    );
+  }, [conversations, searchQuery]);
 
   // プロジェクト一覧を取得
   useEffect(() => {
@@ -159,36 +172,63 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setFilter("all")}
-          className={cn(
-            "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-            filter === "all"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted hover:bg-muted/80"
+      {/* Search and Filter */}
+      <div className="space-y-4 mb-6">
+        {/* Search */}
+        <div className="relative">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            search
+          </span>
+          <Input
+            type="text"
+            placeholder="タイトルやプロジェクト名で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            aria-label="会話を検索"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded transition-colors"
+              aria-label="検索をクリア"
+            >
+              <span className="material-symbols-outlined text-muted-foreground text-sm">close</span>
+            </button>
           )}
-        >
-          すべて
-        </button>
-        {(Object.keys(modeConfig) as ChatMode[]).map((mode) => (
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-2 flex-wrap">
           <button
-            key={mode}
-            onClick={() => setFilter(mode)}
+            onClick={() => setFilter("all")}
             className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
-              filter === mode
+              "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+              filter === "all"
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted hover:bg-muted/80"
             )}
           >
-            <span className={cn("material-symbols-outlined text-lg", filter === mode ? "" : modeConfig[mode].color)}>
-              {modeConfig[mode].icon}
-            </span>
-            {modeConfig[mode].title}
+            すべて
           </button>
-        ))}
+          {(Object.keys(modeConfig) as ChatMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setFilter(mode)}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
+                filter === mode
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              )}
+            >
+              <span className={cn("material-symbols-outlined text-lg", filter === mode ? "" : modeConfig[mode].color)}>
+                {modeConfig[mode].icon}
+              </span>
+              {modeConfig[mode].title}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Conversation list */}
@@ -196,7 +236,22 @@ export default function HistoryPage() {
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      ) : conversations.length === 0 ? (
+      ) : filteredConversations.length === 0 && searchQuery ? (
+        <div className="text-center py-12">
+          <span className="material-symbols-outlined text-6xl text-muted-foreground mb-4">
+            search_off
+          </span>
+          <p className="text-muted-foreground mb-2">
+            「{searchQuery}」に一致する会話が見つかりません
+          </p>
+          <button
+            onClick={() => setSearchQuery("")}
+            className="text-primary hover:underline"
+          >
+            検索をクリア
+          </button>
+        </div>
+      ) : filteredConversations.length === 0 ? (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-6xl text-muted-foreground mb-4">
             history
@@ -211,7 +266,7 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {conversations.map((conversation) => {
+          {filteredConversations.map((conversation) => {
             const config = modeConfig[conversation.mode];
             return (
               <div

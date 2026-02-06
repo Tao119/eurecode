@@ -9,6 +9,7 @@ import {
   updateTokenUsage,
   TOKEN_LIMIT_EXCEEDED_CODE,
 } from "@/lib/token-limit";
+import { rateLimiters, rateLimitErrorResponse, rateLimitHeaders } from "@/lib/rate-limit";
 
 const validLearningTypes = ["insight", "reflection"] as const;
 
@@ -114,6 +115,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: { code: "UNAUTHORIZED", message: "認証が必要です" } },
         { status: 401 }
       );
+    }
+
+    // Rate limiting
+    const rateLimitResult = rateLimiters.learning(session.user.id);
+    if (!rateLimitResult.success) {
+      return rateLimitErrorResponse(rateLimitResult);
     }
 
     let body;

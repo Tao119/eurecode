@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, createContext, useContext, useCallback, useEffect, useRef } from "react";
+import { useState, createContext, useContext, useCallback, useEffect, useRef, memo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { Message, InteractiveQuestion, InteractiveQuizForm, ChatMode, FileAttachment } from "@/types/chat";
@@ -179,7 +179,7 @@ function detectInteractiveQuiz(content: string): InteractiveQuizForm | null {
   };
 }
 
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
   message,
   isStreaming = false,
   onOptionSelect,
@@ -433,9 +433,12 @@ export function ChatMessage({
       />
     </div>
   );
-}
+});
 
-// Option buttons component
+// Display name for debugging
+ChatMessage.displayName = "ChatMessage";
+
+// Option buttons component with accessibility
 function OptionButtons({
   options,
   onSelect,
@@ -444,10 +447,53 @@ function OptionButtons({
   onSelect?: (option: string) => void;
 }) {
   const isDisabled = !onSelect;
+  const groupId = `quiz-options-${Math.random().toString(36).slice(2, 9)}`;
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    option: { label: string; text: string },
+    index: number
+  ) => {
+    if (isDisabled) return;
+
+    switch (e.key) {
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        onSelect?.(`${option.label}) ${option.text}`);
+        break;
+      case "ArrowDown":
+      case "ArrowRight":
+        e.preventDefault();
+        {
+          const nextIndex = (index + 1) % options.length;
+          const nextButton = document.querySelector(
+            `[data-option-index="${groupId}-${nextIndex}"]`
+          ) as HTMLButtonElement;
+          nextButton?.focus();
+        }
+        break;
+      case "ArrowUp":
+      case "ArrowLeft":
+        e.preventDefault();
+        {
+          const prevIndex = (index - 1 + options.length) % options.length;
+          const prevButton = document.querySelector(
+            `[data-option-index="${groupId}-${prevIndex}"]`
+          ) as HTMLButtonElement;
+          prevButton?.focus();
+        }
+        break;
+    }
+  };
 
   return (
-    <div className="mt-3 sm:mt-4 space-y-2">
-      <div className="flex items-center gap-2 mb-2">
+    <div
+      className="mt-3 sm:mt-4 space-y-2"
+      role="group"
+      aria-label="クイズの選択肢"
+    >
+      <div className="flex items-center gap-2 mb-2" aria-hidden="true">
         <span className={cn(
           "material-symbols-outlined text-base sm:text-lg",
           isDisabled ? "text-muted-foreground" : "text-primary"
@@ -458,14 +504,21 @@ function OptionButtons({
           {isDisabled ? "回答済み" : "タップして回答"}
         </span>
       </div>
-      <div className="grid gap-1.5 sm:gap-2">
-        {options.map((option) => (
+      <div className="grid gap-1.5 sm:gap-2" role="radiogroup" aria-label="選択肢">
+        {options.map((option, index) => (
           <button
             key={option.label}
+            data-option-index={`${groupId}-${index}`}
             onClick={() => onSelect?.(`${option.label}) ${option.text}`)}
+            onKeyDown={(e) => handleKeyDown(e, option, index)}
             disabled={isDisabled}
+            role="radio"
+            aria-checked={false}
+            aria-label={`選択肢 ${option.label}: ${option.text}`}
+            tabIndex={isDisabled ? -1 : 0}
             className={cn(
               "w-full text-left p-2.5 sm:p-3 rounded-lg border transition-all",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
               isDisabled
                 ? "border-border/50 bg-muted/30 cursor-not-allowed opacity-60"
                 : "border-border bg-card hover:bg-primary/10 hover:border-primary/50 active:scale-[0.98] group/option cursor-pointer"

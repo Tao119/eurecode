@@ -19,6 +19,7 @@ import {
 import type { AIModel } from "@/config/plans";
 import { buildProjectContext } from "@/lib/rag-service";
 import { embedConversationMessages } from "@/lib/embedding-service";
+import { rateLimiters, rateLimitErrorResponse } from "@/lib/rate-limit";
 
 // Map ClaudeModel to AIModel for point consumption
 // haiku is treated as sonnet for billing purposes
@@ -176,6 +177,12 @@ export async function POST(request: NextRequest) {
         }),
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    // Rate limiting
+    const rateLimitResult = rateLimiters.chat(session.user.id);
+    if (!rateLimitResult.success) {
+      return rateLimitErrorResponse(rateLimitResult);
     }
 
     // Parse and validate request body
