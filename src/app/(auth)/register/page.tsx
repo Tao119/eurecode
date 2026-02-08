@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -107,8 +107,16 @@ function RegisterFormSkeleton() {
 }
 
 function RegisterForm() {
+  const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Redirect authenticated users to home
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.push("/home");
+    }
+  }, [status, router]);
 
   // Get plan and type from URL parameters
   const initialPlan = searchParams.get("plan");
