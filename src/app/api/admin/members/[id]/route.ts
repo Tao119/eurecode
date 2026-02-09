@@ -55,6 +55,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         id: true,
         displayName: true,
         email: true,
+        userType: true,
         createdAt: true,
         settings: true,
         accessKey: {
@@ -198,6 +199,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           id: member.id,
           displayName: member.displayName,
           email: member.email,
+          isAdmin: member.userType === "admin",
           joinedAt: member.createdAt.toISOString(),
           lastActiveAt: lastActiveAt?.toISOString() || null,
           status: isActive ? "active" : "inactive",
@@ -311,13 +313,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         organizationId: session.user.organizationId,
         userType: { in: ["member", "admin"] },
       },
-      select: { id: true, settings: true },
+      select: { id: true, userType: true, settings: true },
     });
 
     if (!member) {
       return NextResponse.json(
         { success: false, error: { code: "NOT_FOUND", message: "メンバーが見つかりません" } },
         { status: 404 }
+      );
+    }
+
+    // Prevent disabling admin users
+    if (member.userType === "admin" && parsed.data.isEnabled === false) {
+      return NextResponse.json(
+        { success: false, error: { code: "FORBIDDEN", message: "管理者を無効にすることはできません" } },
+        { status: 403 }
       );
     }
 

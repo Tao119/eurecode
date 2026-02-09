@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
         id: true,
         displayName: true,
         email: true,
+        userType: true,
         createdAt: true,
         accessKey: {
           select: {
@@ -117,6 +118,7 @@ export async function GET(request: NextRequest) {
         id: member.id,
         displayName: member.displayName,
         email: member.email,
+        isAdmin: member.userType === "admin",
         joinedAt: member.createdAt.toISOString(),
         lastActiveAt: lastActiveAt?.toISOString() || null,
         allocatedPoints,

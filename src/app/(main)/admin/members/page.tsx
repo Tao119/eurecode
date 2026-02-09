@@ -28,6 +28,7 @@ interface Member {
   id: string;
   displayName: string;
   email: string | null;
+  isAdmin: boolean;
   joinedAt: string;
   lastActiveAt: string | null;
   allocatedPoints: number;
@@ -52,6 +53,7 @@ interface MemberDetail {
     id: string;
     displayName: string;
     email: string | null;
+    isAdmin: boolean;
     joinedAt: string;
     lastActiveAt: string | null;
     status: string;
@@ -598,13 +600,27 @@ export default function MembersPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm shrink-0">
-                        {member.displayName?.charAt(0) || "?"}
+                      <div className={cn(
+                        "size-8 rounded-full flex items-center justify-center font-medium text-sm shrink-0",
+                        member.isAdmin ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
+                      )}>
+                        {member.isAdmin ? (
+                          <span className="material-symbols-outlined text-base">shield_person</span>
+                        ) : (
+                          member.displayName?.charAt(0) || "?"
+                        )}
                       </div>
                       <div className="min-w-0">
-                        <span className="font-medium text-sm truncate block">
-                          {member.displayName || "名前未設定"}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-sm truncate">
+                            {member.displayName || "名前未設定"}
+                          </span>
+                          {member.isAdmin && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 shrink-0">
+                              管理者
+                            </span>
+                          )}
+                        </div>
                         {member.email && (
                           <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                         )}
@@ -693,11 +709,25 @@ export default function MembersPage() {
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm">
-                            {member.displayName?.charAt(0) || "?"}
+                          <div className={cn(
+                            "size-8 rounded-full flex items-center justify-center font-medium text-sm",
+                            member.isAdmin ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
+                          )}>
+                            {member.isAdmin ? (
+                              <span className="material-symbols-outlined text-base">shield_person</span>
+                            ) : (
+                              member.displayName?.charAt(0) || "?"
+                            )}
                           </div>
                           <div>
-                            <span className="font-medium">{member.displayName || "名前未設定"}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{member.displayName || "名前未設定"}</span>
+                              {member.isAdmin && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400">
+                                  管理者
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               会話: {member.stats.totalConversations} | 学び: {member.stats.totalLearnings}
                             </p>
@@ -797,7 +827,15 @@ export default function MembersPage() {
                   {selectedMember.member.displayName?.charAt(0) || "?"}
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">{selectedMember.member.displayName || "名前未設定"}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-bold">{selectedMember.member.displayName || "名前未設定"}</h3>
+                    {selectedMember.member.isAdmin && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400">
+                        <span className="material-symbols-outlined text-sm">shield_person</span>
+                        管理者
+                      </span>
+                    )}
+                  </div>
                   {selectedMember.member.email && (
                     <p className="text-sm text-muted-foreground">{selectedMember.member.email}</p>
                   )}
@@ -814,16 +852,18 @@ export default function MembersPage() {
                   <div>
                     <p className="font-medium text-sm">アカウント有効</p>
                     <p className="text-xs text-muted-foreground">
-                      無効にするとメンバーはログインできなくなります
+                      {selectedMember.member.isAdmin
+                        ? "管理者アカウントは無効化できません"
+                        : "無効にするとメンバーはログインできなくなります"}
                     </p>
                   </div>
                   <button
                     onClick={() => handleToggleEnabled(selectedMember.member.id, !selectedMember.member.isEnabled)}
-                    disabled={isPending}
+                    disabled={isPending || selectedMember.member.isAdmin}
                     className={cn(
                       "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
                       selectedMember.member.isEnabled ? "bg-green-500" : "bg-muted",
-                      isPending && "opacity-50"
+                      (isPending || selectedMember.member.isAdmin) && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     <span
@@ -917,25 +957,27 @@ export default function MembersPage() {
                 )}
               </div>
 
-              {/* Danger Zone */}
-              <div className="p-4 border border-destructive/50 rounded-lg">
-                <h4 className="font-medium text-destructive mb-3">危険な操作</h4>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">メンバーを削除</p>
-                    <p className="text-xs text-muted-foreground">
-                      メンバーとすべてのデータを完全に削除します
-                    </p>
+              {/* Danger Zone - Hidden for admins */}
+              {!selectedMember.member.isAdmin && (
+                <div className="p-4 border border-destructive/50 rounded-lg">
+                  <h4 className="font-medium text-destructive mb-3">危険な操作</h4>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">メンバーを削除</p>
+                      <p className="text-xs text-muted-foreground">
+                        メンバーとすべてのデータを完全に削除します
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      削除
+                    </Button>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    削除
-                  </Button>
                 </div>
-              </div>
+              )}
 
               {/* Statistics */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -1064,7 +1106,7 @@ export default function MembersPage() {
                           <div
                             className="w-full bg-primary/60 rounded-t"
                             style={{ height: `${Math.max(heightPercent, 2)}%` }}
-                            title={`${day.date}: ${day.tokensUsed}pt`}
+                            title={`${day.date}: ${day.tokensUsed}point`}
                           />
                           <span className="text-[10px] text-muted-foreground">
                             {new Date(day.date).getDate()}日
