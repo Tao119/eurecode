@@ -464,14 +464,35 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
     setGenerationRecovery(null);
   }, []);
 
-  // Stop generation
+  // Stop generation and remove cancelled messages
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsLoading(false);
+      isStreamingRef.current = false;
+
+      // Remove the user message and partial/empty assistant message
+      setMessages((prev) => {
+        if (prev.length < 2) return prev;
+
+        const lastTwo = prev.slice(-2);
+        // Verify it's a user message followed by an assistant message (the pattern when sending)
+        if (lastTwo[0].role === "user" && lastTwo[1].role === "assistant") {
+          // Remove both - treat the cancelled request as if it never happened
+          return prev.slice(0, -2);
+        }
+
+        // Fallback: just remove empty assistant message if present
+        const last = prev[prev.length - 1];
+        if (last.role === "assistant" && !last.content.trim()) {
+          return prev.slice(0, -1);
+        }
+
+        return prev;
+      });
     }
-  }, []);
+  }, [setMessages]);
 
   // Fork from a specific message
   const forkFromMessage = useCallback((messageIndex: number) => {

@@ -100,36 +100,40 @@ function attachmentsToContentBlocks(attachments: LooseFileAttachment[]): Content
 }
 
 // Convert messages to Claude API format with attachments support
+// Filters out assistant messages with empty content (can happen when user cancels)
 function messagesToAnthropicFormat(messages: Array<{ role: "user" | "assistant"; content: string; attachments?: LooseFileAttachment[] }>): MessageParam[] {
-  return messages.map((msg) => {
-    // If message has attachments and is from user, create multimodal content
-    if (msg.role === "user" && msg.attachments && msg.attachments.length > 0) {
-      const contentBlocks: ContentBlockParam[] = [];
+  return messages
+    // Filter out assistant messages with empty content (happens on cancel)
+    .filter((msg) => msg.role === "user" || msg.content.trim().length > 0)
+    .map((msg) => {
+      // If message has attachments and is from user, create multimodal content
+      if (msg.role === "user" && msg.attachments && msg.attachments.length > 0) {
+        const contentBlocks: ContentBlockParam[] = [];
 
-      // Add file attachments first
-      const attachmentBlocks = attachmentsToContentBlocks(msg.attachments);
-      contentBlocks.push(...attachmentBlocks);
+        // Add file attachments first
+        const attachmentBlocks = attachmentsToContentBlocks(msg.attachments);
+        contentBlocks.push(...attachmentBlocks);
 
-      // Add text content if present
-      if (msg.content.trim()) {
-        contentBlocks.push({
-          type: "text",
-          text: msg.content,
-        });
+        // Add text content if present
+        if (msg.content.trim()) {
+          contentBlocks.push({
+            type: "text",
+            text: msg.content,
+          });
+        }
+
+        return {
+          role: msg.role,
+          content: contentBlocks,
+        };
       }
 
+      // Simple text message
       return {
         role: msg.role,
-        content: contentBlocks,
+        content: msg.content,
       };
-    }
-
-    // Simple text message
-    return {
-      role: msg.role,
-      content: msg.content,
-    };
-  });
+    });
 }
 
 // Allowed file types for attachments
