@@ -94,29 +94,7 @@ function LoggedInDashboard({ displayName }: { displayName: string }) {
 
         {/* Quick Action Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-          {/* Brainstorm - Primary */}
-          <Card className="group relative overflow-hidden border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-500/5 hover:border-purple-500/50 transition-all cursor-pointer">
-            <Link href="/chat/brainstorm" className="block">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="size-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-2xl text-purple-400">
-                      lightbulb
-                    </span>
-                  </div>
-                  <span className="material-symbols-outlined text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    arrow_forward
-                  </span>
-                </div>
-                <h3 className="text-lg font-bold text-purple-400 mb-1">壁打ちモード</h3>
-                <p className="text-sm text-muted-foreground">
-                  アイデアを整理・深掘りして、思考を明確に
-                </p>
-              </CardContent>
-            </Link>
-          </Card>
-
-          {/* Explanation */}
+          {/* Explanation - Primary */}
           <Card className="group relative overflow-hidden border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-blue-500/5 hover:border-blue-500/50 transition-all cursor-pointer">
             <Link href="/chat/explanation" className="block">
               <CardContent className="p-6">
@@ -155,6 +133,28 @@ function LoggedInDashboard({ displayName }: { displayName: string }) {
                 <h3 className="text-lg font-bold text-yellow-400 mb-1">生成モード</h3>
                 <p className="text-sm text-muted-foreground">
                   一緒にコードを作成し、実装力を磨く
+                </p>
+              </CardContent>
+            </Link>
+          </Card>
+
+          {/* Brainstorm */}
+          <Card className="group relative overflow-hidden border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-500/5 hover:border-purple-500/50 transition-all cursor-pointer">
+            <Link href="/chat/brainstorm" className="block">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="size-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-2xl text-purple-400">
+                      lightbulb
+                    </span>
+                  </div>
+                  <span className="material-symbols-outlined text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    arrow_forward
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-purple-400 mb-1">壁打ちモード</h3>
+                <p className="text-sm text-muted-foreground">
+                  アイデアを整理・深掘りして、思考を明確に
                 </p>
               </CardContent>
             </Link>
