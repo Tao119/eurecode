@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, createContext, useContext, useCallback, useEffect, useRef, memo } from "react";
+import { useState, createContext, useContext, useCallback, useEffect, useRef, memo, useMemo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { Message, InteractiveQuestion, InteractiveQuizForm, ChatMode, FileAttachment } from "@/types/chat";
@@ -289,15 +289,18 @@ export const ChatMessage = memo(function ChatMessage({
   // Simple options (A/B/C/D) should work in all modes
   const shouldShowSimpleOptions = quizEnabled;
 
+  // Memoize quiz/option detection to prevent flickering on re-renders
   // First try to detect interactive quiz (multiple question types) - explanation mode only
-  const interactiveQuiz = isAssistant && !isStreaming && shouldShowInteractiveQuiz
-    ? detectInteractiveQuiz(message.content)
-    : null;
+  const interactiveQuiz = useMemo(() => {
+    if (!isAssistant || isStreaming || !shouldShowInteractiveQuiz) return null;
+    return detectInteractiveQuiz(message.content);
+  }, [isAssistant, isStreaming, shouldShowInteractiveQuiz, message.content]);
 
   // Fall back to simple n-choice detection if no interactive quiz - all modes
-  const detectedOptions = isAssistant && !isStreaming && shouldShowSimpleOptions && !interactiveQuiz
-    ? detectOptions(message.content)
-    : null;
+  const detectedOptions = useMemo(() => {
+    if (!isAssistant || isStreaming || !shouldShowSimpleOptions || interactiveQuiz) return null;
+    return detectOptions(message.content);
+  }, [isAssistant, isStreaming, shouldShowSimpleOptions, interactiveQuiz, message.content]);
 
   // Determine display content
   const displayContent = interactiveQuiz
