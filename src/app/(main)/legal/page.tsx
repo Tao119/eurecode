@@ -6,8 +6,9 @@ export const metadata = {
 
 export default function LegalPage() {
   return (
-    <Card className="w-full max-w-3xl">
-      <CardHeader>
+    <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <Card className="w-full max-w-3xl">
+        <CardHeader>
         <CardTitle className="text-2xl font-bold">特定商取引法に基づく表記</CardTitle>
       </CardHeader>
       <CardContent className="space-y-8">
@@ -115,7 +116,8 @@ export default function LegalPage() {
         <div className="text-sm text-muted-foreground">
           <p>最終更新日: 2026年2月</p>
         </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

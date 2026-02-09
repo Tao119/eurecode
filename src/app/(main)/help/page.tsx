@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function HelpPage() {
   return (
-    <Card className="w-full max-w-3xl">
-      <CardHeader>
+    <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <Card className="w-full max-w-3xl">
+        <CardHeader>
         <CardTitle className="text-2xl font-bold">ヘルプ</CardTitle>
         <p className="text-sm text-muted-foreground">
           よくある質問とサポート情報
@@ -117,7 +118,8 @@ export default function HelpPage() {
             ← ログインページに戻る
           </Link>
         </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

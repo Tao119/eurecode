@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function TermsPage() {
   const router = useRouter();
   return (
-    <Card className="w-full max-w-3xl">
-      <CardHeader>
+    <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <Card className="w-full max-w-3xl">
+        <CardHeader>
         <CardTitle className="text-2xl font-bold">利用規約</CardTitle>
         <p className="text-sm text-muted-foreground">
           最終更新日: 2026年1月1日
@@ -108,7 +109,8 @@ export default function TermsPage() {
             ← 戻る
           </button>
         </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
