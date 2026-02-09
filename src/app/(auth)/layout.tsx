@@ -12,7 +12,7 @@ export default function AuthLayout({
       <Header />
 
       {/* Main Content */}
-      <main className="flex-1 pt-14 flex items-center justify-center px-4 py-8 sm:py-12">
+      <main className="flex-1 pt-20 sm:pt-24 pb-8 sm:pb-12 flex justify-center px-4">
         {children}
       </main>
 
