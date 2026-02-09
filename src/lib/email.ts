@@ -103,6 +103,83 @@ ${verificationUrl}
   });
 }
 
+// Contact form email
+export async function sendContactEmail({
+  name,
+  email,
+  subject,
+  message,
+}: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}) {
+  const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@eurecode.jp";
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>お問い合わせ</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">${APP_NAME} お問い合わせ</h1>
+        </div>
+        <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #333; margin-top: 0;">新しいお問い合わせ</h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0; font-weight: bold; width: 100px;">お名前</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0;">${name}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0; font-weight: bold;">メール</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0;"><a href="mailto:${email}">${email}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0; font-weight: bold;">件名</td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e0e0e0;">${subject}</td>
+            </tr>
+          </table>
+          <div style="margin-top: 20px;">
+            <h3 style="color: #333; margin-bottom: 10px;">メッセージ</h3>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; white-space: pre-wrap;">${message}</div>
+          </div>
+          <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; margin-bottom: 0;">
+            このメールは ${APP_NAME} のお問い合わせフォームから送信されました。
+          </p>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `
+${APP_NAME} - 新しいお問い合わせ
+
+お名前: ${name}
+メール: ${email}
+件名: ${subject}
+
+メッセージ:
+${message}
+
+---
+このメールは ${APP_NAME} のお問い合わせフォームから送信されました。
+  `.trim();
+
+  return sendEmail({
+    to: SUPPORT_EMAIL,
+    subject: `[${APP_NAME}] お問い合わせ: ${subject}`,
+    html,
+    text,
+  });
+}
+
 // Password reset email
 export async function sendPasswordResetEmail(email: string, token: string) {
   const resetUrl = `${APP_URL}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;

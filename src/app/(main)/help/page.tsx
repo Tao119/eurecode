@@ -101,15 +101,16 @@ export default function HelpPage() {
             お問い合わせ
           </h2>
           <div className="p-4 bg-muted/50 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              ご質問やご要望がございましたら、以下の方法でお問い合わせください。
+            <p className="text-sm text-muted-foreground mb-4">
+              ご質問やご要望がございましたら、お問い合わせフォームからご連絡ください。
             </p>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base">email</span>
-                support@eurecode.com
-              </li>
-            </ul>
+            <Link
+              href="/contact"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+            >
+              <span className="material-symbols-outlined text-base">send</span>
+              お問い合わせフォームへ
+            </Link>
           </div>
         </section>
 

@@ -86,12 +86,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="mailto:support@eurecode.jp"
+                <Link
+                  href="/contact"
                   className="text-muted-foreground hover:text-primary transition-colors"
                 >
                   お問い合わせ
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
@@ -66,12 +67,15 @@ export default function CompanyPage() {
         <section>
           <h2 className="text-lg font-semibold mb-4">お問い合わせ</h2>
           <p className="text-muted-foreground">
-            サービスに関するお問い合わせは、以下のメールアドレスまでお願いいたします。
+            サービスに関するお問い合わせは、お問い合わせフォームからお願いいたします。
           </p>
-          <p className="mt-2">
-            <a href="mailto:support@eurecode.jp" className="text-primary hover:underline">
-              support@eurecode.jp
-            </a>
+          <p className="mt-4">
+            <Link
+              href="/contact"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+            >
+              お問い合わせフォームへ
+            </Link>
           </p>
         </section>
       </CardContent>
