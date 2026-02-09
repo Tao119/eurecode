@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -97,7 +97,7 @@ function formatDateLabel(dateString: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-function StatCard({
+const StatCard = memo(function StatCard({
   icon,
   iconColor,
   label,
@@ -130,13 +130,13 @@ function StatCard({
       </CardContent>
     </Card>
   );
-}
+});
 
-function LearningTimeChart({ data }: { data: Array<{ date: string; minutes: number }> }) {
-  const chartData = data.map((item) => ({
+const LearningTimeChart = memo(function LearningTimeChart({ data }: { data: Array<{ date: string; minutes: number }> }) {
+  const chartData = useMemo(() => data.map((item) => ({
     ...item,
     name: formatDateLabel(item.date),
-  }));
+  })), [data]);
 
   return (
     <Card className="col-span-2">
@@ -191,13 +191,21 @@ function LearningTimeChart({ data }: { data: Array<{ date: string; minutes: numb
       </CardContent>
     </Card>
   );
-}
+});
 
-function UnderstandingRadarChart({
+const UnderstandingRadarChart = memo(function UnderstandingRadarChart({
   data,
 }: {
   data: Array<{ subject: string; value: number; fullMark: number }>;
 }) {
+  const hasData = useMemo(() => data.length > 0 && data.some((d) => d.value > 0), [data]);
+  const ariaLabel = useMemo(() =>
+    hasData
+      ? `トピック別理解度レーダーチャート: ${data.map(d => `${d.subject}: ${d.value}%`).join(", ")}`
+      : "学習データを蓄積中",
+    [data, hasData]
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -208,8 +216,8 @@ function UnderstandingRadarChart({
         <CardDescription>トピック別の理解度</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]" role="img" aria-label={data.length > 0 && data.some((d) => d.value > 0) ? `トピック別理解度レーダーチャート: ${data.map(d => `${d.subject}: ${d.value}%`).join(", ")}` : "学習データを蓄積中"}>
-          {data.length > 0 && data.some((d) => d.value > 0) ? (
+        <div className="h-[300px]" role="img" aria-label={ariaLabel}>
+          {hasData ? (
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data} aria-hidden="true">
                 <PolarGrid className="stroke-muted" />
@@ -251,17 +259,17 @@ function UnderstandingRadarChart({
       </CardContent>
     </Card>
   );
-}
+});
 
-function EstimationAccuracyChart({
+const EstimationAccuracyChart = memo(function EstimationAccuracyChart({
   data,
 }: {
   data: Array<{ date: string; predicted: number; actual: number }>;
 }) {
-  const chartData = data.map((item) => ({
+  const chartData = useMemo(() => data.map((item) => ({
     ...item,
     name: formatDateLabel(item.date),
-  }));
+  })), [data]);
 
   return (
     <div className="h-[300px]" role="img" aria-label={chartData.length > 0 ? `見積もり精度グラフ: ${chartData.map(d => `${d.name}: 予測${d.predicted}分, 実績${d.actual}分`).join(", ")}` : "見積もりデータがありません"}>
@@ -316,10 +324,10 @@ function EstimationAccuracyChart({
       )}
     </div>
   );
-}
+});
 
 // Quick Action Card for navigation to chat modes
-function QuickActionCard({
+const QuickActionCard = memo(function QuickActionCard({
   mode,
   description,
 }: {
@@ -350,10 +358,10 @@ function QuickActionCard({
       </Card>
     </Link>
   );
-}
+});
 
 // Related Chats Card showing recent conversations
-function RelatedChatsCard({
+const RelatedChatsCard = memo(function RelatedChatsCard({
   conversations,
   isLoading,
 }: {
@@ -439,10 +447,10 @@ function RelatedChatsCard({
       </CardContent>
     </Card>
   );
-}
+});
 
 // Estimation Accuracy Dialog Button
-function EstimationAccuracyButton({
+const EstimationAccuracyButton = memo(function EstimationAccuracyButton({
   data,
 }: {
   data: Array<{ date: string; predicted: number; actual: number }>;
@@ -469,9 +477,9 @@ function EstimationAccuracyButton({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
-function SelfSolveRateCard({ rate }: { rate: number }) {
+const SelfSolveRateCard = memo(function SelfSolveRateCard({ rate }: { rate: number }) {
   const getColor = (r: number) => {
     if (r >= 70) return "text-green-500";
     if (r >= 40) return "text-yellow-500";
@@ -526,7 +534,7 @@ function SelfSolveRateCard({ rate }: { rate: number }) {
       </CardContent>
     </Card>
   );
-}
+});
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();

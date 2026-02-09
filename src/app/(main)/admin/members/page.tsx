@@ -948,8 +948,8 @@ export default function MembersPage() {
                   <p className="text-sm text-muted-foreground">学び数</p>
                 </div>
                 <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold">{selectedMember.statistics.tokensUsedMonth.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">月間ポイント</p>
+                  <p className="text-2xl font-bold">{selectedMember.statistics.tokensUsedMonth.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">pt</span></p>
+                  <p className="text-sm text-muted-foreground">今月の使用量</p>
                 </div>
               </div>
 
@@ -972,11 +972,11 @@ export default function MembersPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">割り当て上限</span>
-                    <span className="font-medium">{selectedMember.tokenAllocation.monthlyLimit.toLocaleString()}</span>
+                    <span className="font-medium">{selectedMember.tokenAllocation.monthlyLimit.toLocaleString()} pt</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">使用済み</span>
-                    <span className="font-medium">{selectedMember.tokenAllocation.usedPoints.toLocaleString()}</span>
+                    <span className="font-medium">{selectedMember.tokenAllocation.usedPoints.toLocaleString()} pt</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">残り</span>
@@ -984,7 +984,7 @@ export default function MembersPage() {
                       "font-medium",
                       selectedMember.tokenAllocation.remaining <= 0 ? "text-destructive" : ""
                     )}>
-                      {selectedMember.tokenAllocation.remaining.toLocaleString()}
+                      {selectedMember.tokenAllocation.remaining.toLocaleString()} pt
                     </span>
                   </div>
                   {selectedMember.tokenAllocation.monthlyLimit > 0 && (
@@ -1007,7 +1007,7 @@ export default function MembersPage() {
                     </div>
                   )}
                   <div className="pt-2 border-t text-xs text-muted-foreground">
-                    組織全体: {selectedMember.tokenAllocation.organizationTotalAllocated.toLocaleString()} / {selectedMember.tokenAllocation.organizationMonthlyLimit.toLocaleString()} 割り当て済み
+                    組織全体: {selectedMember.tokenAllocation.organizationTotalAllocated.toLocaleString()} / {selectedMember.tokenAllocation.organizationMonthlyLimit.toLocaleString()} pt 割り当て済み
                   </div>
                 </div>
               </div>

@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
         },
         {
           title: "今月のポイント使用量",
-          value: data.statistics.monthlyTokenUsage.toLocaleString(),
+          value: `${data.statistics.monthlyTokenUsage.toLocaleString()} pt`,
           icon: "toll",
           color: "text-yellow-400",
           bgColor: "bg-yellow-500/20",

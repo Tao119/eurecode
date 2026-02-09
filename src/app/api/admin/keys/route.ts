@@ -65,8 +65,16 @@ export async function GET(request: NextRequest) {
       : null;
 
     // Build where clause
+    // 無効化されたキーでユーザー登録がないものは表示しない
     const whereClause: Prisma.AccessKeyWhereInput = {
       organizationId: session.user.organizationId,
+      // Exclude revoked keys that were never used (no user registered)
+      NOT: {
+        AND: [
+          { status: "revoked" },
+          { userId: null },
+        ],
+      },
       ...(status && { status: status as "active" | "used" | "expired" | "revoked" }),
       ...(search && {
         OR: [
@@ -124,10 +132,18 @@ export async function GET(request: NextRequest) {
     // Get total count
     const totalCount = await prisma.accessKey.count({ where: whereClause });
 
-    // Get status counts
+    // Get status counts (excluding revoked keys without user registration)
     const statusCounts = await prisma.accessKey.groupBy({
       by: ["status"],
-      where: { organizationId: session.user.organizationId },
+      where: {
+        organizationId: session.user.organizationId,
+        NOT: {
+          AND: [
+            { status: "revoked" },
+            { userId: null },
+          ],
+        },
+      },
       _count: { id: true },
     });
 
