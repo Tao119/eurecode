@@ -34,14 +34,6 @@ const NAV_ITEMS: NavItem[] = [
 
 const CHAT_MODES = [
   {
-    href: "/chat/brainstorm",
-    label: "壁打ち",
-    description: "アイデアを整理・深掘り",
-    icon: "lightbulb",
-    color: "text-purple-400",
-    bgColor: "bg-purple-500/10 hover:bg-purple-500/20",
-  },
-  {
     href: "/chat/explanation",
     label: "解説",
     description: "コードの理解を深める",
@@ -56,6 +48,14 @@ const CHAT_MODES = [
     icon: "code",
     color: "text-yellow-400",
     bgColor: "bg-yellow-500/10 hover:bg-yellow-500/20",
+  },
+  {
+    href: "/chat/brainstorm",
+    label: "壁打ち",
+    description: "アイデアを整理・深掘り",
+    icon: "lightbulb",
+    color: "text-purple-400",
+    bgColor: "bg-purple-500/10 hover:bg-purple-500/20",
   },
 ];
 
