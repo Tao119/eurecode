@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: result.error.errors[0].message,
+          error: result.error.issues[0].message,
         },
         { status: 400 }
       );
