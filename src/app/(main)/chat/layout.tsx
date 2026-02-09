@@ -23,7 +23,7 @@ export default function ChatLayout({
 
   if (status === "loading") {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="h-[calc(100dvh-3.5rem)] flex items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -33,9 +33,12 @@ export default function ChatLayout({
     return null;
   }
 
+  // チャット画面は全画面表示（ヘッダー56px = 3.5remを除く）
   return (
-    <ChatWithCredits>
-      {children}
-    </ChatWithCredits>
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col overflow-hidden">
+      <ChatWithCredits>
+        {children}
+      </ChatWithCredits>
+    </div>
   );
 }

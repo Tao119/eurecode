@@ -36,7 +36,7 @@ export function ChatWithCredits({ children, onSendMessage }: ChatWithCreditsProp
   }, [credits.isBlocked, credits.isLoading]);
 
   return (
-    <>
+    <div className="flex flex-col h-full min-h-0">
       {/* 低残高警告バナー（5会話以下） */}
       {credits.lowBalanceWarning && !credits.isBlocked && (
         <LowBalanceWarning
@@ -55,7 +55,9 @@ export function ChatWithCredits({ children, onSendMessage }: ChatWithCreditsProp
       )}
 
       {/* チャット本体 */}
-      {children}
+      <div className="flex-1 min-h-0">
+        {children}
+      </div>
 
       {/* OutOfCreditsModal */}
       <OutOfCreditsModal
@@ -68,7 +70,7 @@ export function ChatWithCredits({ children, onSendMessage }: ChatWithCreditsProp
         isOrganizationMember={credits.isOrganizationMember}
         isCompletelyOut={credits.isBlocked}
       />
-    </>
+    </div>
   );
 }
 
