@@ -27,7 +27,7 @@ export default function LegalPage() {
                   運営責任者
                 </th>
                 <td className="py-4">
-                  松村 太緒
+                  松村 大央
                 </td>
               </tr>
               <tr>
@@ -113,7 +113,7 @@ export default function LegalPage() {
         </div>
 
         <div className="text-sm text-muted-foreground">
-          <p>最終更新日: 2025年2月</p>
+          <p>最終更新日: 2026年2月</p>
         </div>
       </CardContent>
     </Card>

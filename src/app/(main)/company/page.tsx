@@ -6,7 +6,8 @@ export const metadata = {
 
 export default function CompanyPage() {
   return (
-    <Card className="w-full max-w-3xl">
+    <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <Card className="w-full max-w-3xl">
       <CardHeader>
         <CardTitle className="text-2xl font-bold">運営会社</CardTitle>
       </CardHeader>
@@ -32,7 +33,7 @@ export default function CompanyPage() {
                   <th className="py-3 pr-4 text-left font-medium text-muted-foreground">
                     代表者
                   </th>
-                  <td className="py-3">松村 太緒</td>
+                  <td className="py-3">松村 大央</td>
                 </tr>
                 <tr>
                   <th className="py-3 pr-4 text-left font-medium text-muted-foreground">
@@ -75,5 +76,6 @@ export default function CompanyPage() {
         </section>
       </CardContent>
     </Card>
+    </div>
   );
 }
