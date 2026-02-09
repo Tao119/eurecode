@@ -131,6 +131,10 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
   // タイトル生成の試行回数（最初のAI応答後と、メッセージが増えた後に再生成）
   const titleGenerationAttemptRef = useRef<number>(0);
   const lastTitleGenerationMessageCountRef = useRef<number>(0);
+  // ストリーミングバッチ更新用
+  const streamingContentRef = useRef<string>("");
+  const streamingRafRef = useRef<number | null>(null);
+  const pendingMetadataRef = useRef<Record<string, unknown> | null>(null);
 
   // Keep metadata ref in sync
   useEffect(() => {
@@ -160,6 +164,46 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
       };
     });
   }, []);
+
+  // Batched streaming update - reduces re-renders by grouping updates per animation frame
+  const flushStreamingUpdate = useCallback(() => {
+    if (!isMountedRef.current) return;
+
+    const content = streamingContentRef.current;
+    const metadata = pendingMetadataRef.current;
+
+    if (content || metadata) {
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage?.role === "assistant") {
+          return [
+            ...newMessages.slice(0, -1),
+            {
+              ...lastMessage,
+              content: content || lastMessage.content,
+              ...(metadata && { metadata: { ...lastMessage.metadata, ...metadata } }),
+            },
+          ];
+        }
+        return newMessages;
+      });
+      pendingMetadataRef.current = null;
+    }
+    streamingRafRef.current = null;
+  }, [setMessages]);
+
+  const scheduleStreamingUpdate = useCallback((content: string, metadata?: Record<string, unknown>) => {
+    streamingContentRef.current = content;
+    if (metadata) {
+      pendingMetadataRef.current = { ...pendingMetadataRef.current, ...metadata };
+    }
+
+    // Only schedule if not already scheduled
+    if (streamingRafRef.current === null) {
+      streamingRafRef.current = requestAnimationFrame(flushStreamingUpdate);
+    }
+  }, [flushStreamingUpdate]);
 
   // Build metadata for saving (includes branch state and external metadata)
   const buildMetadata = useCallback((): ConversationMetadata => {
@@ -582,36 +626,19 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                 }
                 if (parsed.content) {
                   fullContent += parsed.content;
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage.role === "assistant") {
-                      return [
-                        ...newMessages.slice(0, -1),
-                        { ...lastMessage, content: fullContent },
-                      ];
-                    }
-                    return newMessages;
-                  });
-                }
-                if (parsed.metadata) {
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage.role === "assistant") {
-                      return [
-                        ...newMessages.slice(0, -1),
-                        {
-                          ...lastMessage,
-                          metadata: { ...lastMessage.metadata, ...parsed.metadata },
-                        },
-                      ];
-                    }
-                    return newMessages;
-                  });
+                  // Use batched update for better performance
+                  scheduleStreamingUpdate(fullContent, parsed.metadata);
+                } else if (parsed.metadata) {
+                  // Metadata-only update
+                  scheduleStreamingUpdate(fullContent, parsed.metadata);
                 }
                 // Handle done message with tokens used and points consumed
                 if (parsed.done) {
+                  // Handle conversation ID from server (important for first message)
+                  if (parsed.conversationId && !conversationId) {
+                    setConversationId(parsed.conversationId);
+                    onConversationCreated?.(parsed.conversationId);
+                  }
                   if (parsed.tokensUsed !== undefined) {
                     onTokensUsed?.(parsed.tokensUsed);
                   }
@@ -645,20 +672,16 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
                   fullContent += parsed.content;
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage.role === "assistant") {
-                      return [
-                        ...newMessages.slice(0, -1),
-                        { ...lastMessage, content: fullContent },
-                      ];
-                    }
-                    return newMessages;
-                  });
+                  // Use batched update
+                  scheduleStreamingUpdate(fullContent, parsed.metadata);
                 }
                 // Handle done message with tokens used and points consumed (in case it's in the buffer)
                 if (parsed.done) {
+                  // Handle conversation ID from server (important for first message)
+                  if (parsed.conversationId && !conversationId) {
+                    setConversationId(parsed.conversationId);
+                    onConversationCreated?.(parsed.conversationId);
+                  }
                   if (parsed.tokensUsed !== undefined) {
                     onTokensUsed?.(parsed.tokensUsed);
                   }
@@ -675,6 +698,12 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
               }
             }
           }
+        }
+
+        // Flush any pending streaming updates before finishing
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          flushStreamingUpdate();
         }
       } catch (err) {
         // Don't treat abort as an error
@@ -714,7 +743,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         }
       }
     },
-    [mode, isLoading, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode, generateTitle, model]
+    [mode, isLoading, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode, generateTitle, model, scheduleStreamingUpdate, flushStreamingUpdate]
   );
 
   const clearMessages = useCallback(() => {
@@ -847,33 +876,11 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
               }
               if (parsed.content) {
                 fullContent += parsed.content;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant") {
-                    return [
-                      ...newMessages.slice(0, -1),
-                      { ...lastMessage, content: fullContent },
-                    ];
-                  }
-                  return newMessages;
-                });
-              }
-              if (parsed.metadata) {
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant") {
-                    return [
-                      ...newMessages.slice(0, -1),
-                      {
-                        ...lastMessage,
-                        metadata: { ...lastMessage.metadata, ...parsed.metadata },
-                      },
-                    ];
-                  }
-                  return newMessages;
-                });
+                // Use batched update for better performance
+                scheduleStreamingUpdate(fullContent, parsed.metadata);
+              } else if (parsed.metadata) {
+                // Metadata-only update
+                scheduleStreamingUpdate(fullContent, parsed.metadata);
               }
               // Handle done message with tokens used and points consumed
               if (parsed.done) {
@@ -910,17 +917,8 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
               const parsed = JSON.parse(data);
               if (parsed.content) {
                 fullContent += parsed.content;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  if (lastMessage.role === "assistant") {
-                    return [
-                      ...newMessages.slice(0, -1),
-                      { ...lastMessage, content: fullContent },
-                    ];
-                  }
-                  return newMessages;
-                });
+                // Use batched update
+                scheduleStreamingUpdate(fullContent, parsed.metadata);
               }
               // Handle done message with tokens used (in case it's in the buffer)
               if (parsed.done) {
@@ -941,6 +939,12 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
             }
           }
         }
+      }
+
+      // Flush any pending streaming updates before finishing
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        flushStreamingUpdate();
       }
     } catch (err) {
       // Don't treat abort as an error
@@ -967,7 +971,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         saveConversation(latestMessages, conversationId);
       }
     }
-  }, [canRegenerate, isLoading, mode, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode]);
+  }, [canRegenerate, isLoading, mode, onError, onTokensUsed, onPointsConsumed, setMessages, conversationId, saveConversation, brainstormSubMode, scheduleStreamingUpdate, flushStreamingUpdate]);
 
   // Set external metadata (e.g., brainstorm state from BrainstormChatContainer)
   const setExternalMetadata = useCallback((metadata: Partial<ConversationMetadata>) => {
