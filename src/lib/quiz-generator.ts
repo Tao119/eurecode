@@ -452,3 +452,42 @@ export function structuredQuizToUnlockQuiz(quiz: StructuredQuiz): UnlockQuiz {
 export function removeQuizMarkerFromContent(content: string): string {
   return content.replace(/<!--QUIZ:[\s\S]*?-->/g, "").trim();
 }
+
+/**
+ * Remove incomplete streaming tags from content
+ * During streaming, partial tags like "<!--QUIZ:{..." or "<!--ARTIFACT:{..." may appear
+ * This function removes them to prevent showing raw JSON to users
+ *
+ * Logic:
+ * - If <!--QUIZ: exists but no closing --> after it, remove from <!--QUIZ: to end
+ * - If <!--ARTIFACT: exists but no <!--/ARTIFACT--> after it, remove from <!--ARTIFACT: to end
+ */
+export function removeIncompleteStreamingTags(content: string): string {
+  let result = content;
+
+  // Check for incomplete QUIZ tag
+  const quizStartIndex = result.lastIndexOf("<!--QUIZ:");
+  if (quizStartIndex !== -1) {
+    // Look for --> after the QUIZ start
+    const afterQuizStart = result.substring(quizStartIndex);
+    const quizEndIndex = afterQuizStart.indexOf("-->");
+    if (quizEndIndex === -1) {
+      // No closing tag found - remove from <!--QUIZ: to end
+      result = result.substring(0, quizStartIndex);
+    }
+  }
+
+  // Check for incomplete ARTIFACT tag
+  const artifactStartIndex = result.lastIndexOf("<!--ARTIFACT:");
+  if (artifactStartIndex !== -1) {
+    // Look for <!--/ARTIFACT--> after the ARTIFACT start
+    const afterArtifactStart = result.substring(artifactStartIndex);
+    const artifactEndIndex = afterArtifactStart.indexOf("<!--/ARTIFACT-->");
+    if (artifactEndIndex === -1) {
+      // No closing tag found - remove from <!--ARTIFACT: to end
+      result = result.substring(0, artifactStartIndex);
+    }
+  }
+
+  return result;
+}

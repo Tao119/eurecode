@@ -568,6 +568,11 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
+      // Track conversation ID received from server (for first message)
+      // This is needed because React state updates are async and won't be
+      // available in the finally block. Declared outside try block for scope.
+      let receivedConversationId: string | null = null;
+
       try {
         // Get current messages from ref to avoid stale closure
         const currentState = branchStateRef.current;
@@ -657,6 +662,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                 if (parsed.done) {
                   // Handle conversation ID from server (important for first message)
                   if (parsed.conversationId && !conversationId) {
+                    receivedConversationId = parsed.conversationId;
                     setConversationId(parsed.conversationId);
                     onConversationCreated?.(parsed.conversationId);
                   }
@@ -700,6 +706,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
                 if (parsed.done) {
                   // Handle conversation ID from server (important for first message)
                   if (parsed.conversationId && !conversationId) {
+                    receivedConversationId = parsed.conversationId;
                     setConversationId(parsed.conversationId);
                     onConversationCreated?.(parsed.conversationId);
                   }
@@ -743,22 +750,26 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
         abortControllerRef.current = null;
         isStreamingRef.current = false;
 
+        // Use the conversation ID from server response if available (for first message)
+        // This is needed because React state updates are async
+        const effectiveConversationId = receivedConversationId || conversationId;
+
         // Trigger pending save after streaming completes
         if (pendingSaveRef.current) {
           pendingSaveRef.current = false;
           const currentState = branchStateRef.current;
           const currentMessages = currentState.messagesByBranch[currentState.currentBranchId] || [];
-          saveConversation(currentMessages, conversationId);
+          saveConversation(currentMessages, effectiveConversationId);
         }
 
         // タイトル自動生成（会話IDがある場合）
         const currentState = branchStateRef.current;
         const currentMessages = currentState.messagesByBranch[currentState.currentBranchId] || [];
-        if (conversationId && currentMessages.length >= 2) {
+        if (effectiveConversationId && currentMessages.length >= 2) {
           // 少し遅延させて保存完了を待つ
           setTimeout(() => {
-            if (isMountedRef.current && conversationId) {
-              generateTitle(conversationId, currentMessages.length);
+            if (isMountedRef.current && effectiveConversationId) {
+              generateTitle(effectiveConversationId, currentMessages.length);
             }
           }, 1500);
         }

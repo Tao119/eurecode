@@ -18,6 +18,9 @@ export function parseArtifacts(content: string): {
   const artifacts: Artifact[] = [];
   const now = new Date().toISOString();
 
+  // Track IDs to ensure uniqueness within this parse
+  const usedIds = new Set<string>();
+
   const contentWithoutArtifacts = content.replace(
     artifactRegex,
     (match, metaJson, language, code) => {
@@ -31,8 +34,20 @@ export function parseArtifacts(content: string): {
           language?: string;
         };
 
+        // Create unique ID by combining meta.id with title to prevent collisions
+        // This ensures different files (e.g., "Counter.tsx" and "App.tsx") get different IDs
+        let uniqueId = `${meta.id}-${meta.title}`;
+
+        // If ID is already used (same id+title), append a suffix
+        let suffix = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${meta.id}-${meta.title}-${suffix}`;
+          suffix++;
+        }
+        usedIds.add(uniqueId);
+
         artifacts.push({
-          id: meta.id,
+          id: uniqueId,
           type: meta.type || "code",
           title: meta.title,
           content: code.trim(),

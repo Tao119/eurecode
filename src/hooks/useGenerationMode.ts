@@ -504,18 +504,20 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
 
   // アーティファクトを追加または更新
   // 重要: 保存済みの進行状況を最優先で使用する
+  // 重要: 新規アーティファクト追加時、既存アーティファクトの進捗は必ず保持する
   const addOrUpdateArtifact = useCallback((artifact: Artifact) => {
+    // Estimate quiz count based on code complexity (used for both API and local state)
+    const estimatedQuizCount = skipAllowedRef.current ? 0 : estimateQuizCount(artifact.content);
+
     // API同期（非ブロッキング）- conversationIdがある場合のみ
     if (conversationId) {
-      // Estimate quiz count based on code complexity
-      const estimatedQuizCount = estimateQuizCount(artifact.content);
       apiUpsertArtifact(conversationId, {
         id: artifact.id,
         type: artifact.type,
         title: artifact.title,
         content: artifact.content,
         language: artifact.language,
-        totalQuestions: skipAllowedRef.current ? 0 : estimatedQuizCount,
+        totalQuestions: estimatedQuizCount,
       }).catch((e) => {
         console.error("[addOrUpdateArtifact] API sync failed:", e);
       });
@@ -584,16 +586,40 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
         };
       }
 
-      // 新規アーティファクトの場合のみデフォルト値を設定
+      // 新規アーティファクトの場合: このアーティファクト専用のtotalQuestionsを使用
       const newProgress: ArtifactProgress = {
         unlockLevel: 0,
-        totalQuestions: prev.totalQuestions,
+        totalQuestions: estimatedQuizCount,
         currentQuiz: null,
         quizHistory: [],
       };
 
       const newArtifactIsUnlocked = newProgress.totalQuestions === 0;
 
+      // 重要: 既存のアーティファクトが存在する場合、アクティブを切り替えずに追加のみ行う
+      // ユーザーが手動で切り替えるか、最初のアーティファクトの場合のみアクティブにする
+      const hasExistingActiveArtifact = prev.activeArtifactId && prev.artifacts[prev.activeArtifactId];
+
+      if (hasExistingActiveArtifact) {
+        // 既存のアクティブアーティファクトがある: 新規追加のみ、切り替えない
+        return {
+          ...prev,
+          artifacts: {
+            ...prev.artifacts,
+            [artifact.id]: updatedArtifact,
+          },
+          // activeArtifactId は変更しない（現在のアーティファクトを維持）
+          // グローバル状態も変更しない
+          artifactProgress: {
+            ...prev.artifactProgress,
+            [artifact.id]: newProgress,
+          },
+          // フェーズは coding に移行（まだ initial なら）
+          phase: prev.phase === "initial" ? "coding" : prev.phase,
+        };
+      }
+
+      // 最初のアーティファクト: アクティブに設定
       return {
         ...prev,
         artifacts: {

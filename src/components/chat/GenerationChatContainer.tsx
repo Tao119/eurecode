@@ -34,6 +34,7 @@ import {
   generateFallbackQuiz,
   structuredQuizToUnlockQuiz,
   removeQuizMarkerFromContent,
+  removeIncompleteStreamingTags,
   hasFallbackBeenUsed,
   markFallbackAsUsed,
 } from "@/lib/quiz-generator";
@@ -402,10 +403,17 @@ export function GenerationChatContainer({
   }, [skipToUnlock, sendMessageWithArtifact]);
 
   // チャットメッセージを処理（アーティファクトのみ置換、通常コードブロックはそのまま）
-  const getProcessedContent = useCallback((content: string) => {
+  // ストリーミング中は不完全なタグを隠す
+  const getProcessedContent = useCallback((content: string, isStreaming: boolean = false) => {
     let processed = content;
 
-    // Remove quiz markers from display
+    // ストリーミング中: 不完全なタグ（<!--QUIZ:... や <!--ARTIFACT:...）を隠す
+    // これにより、タグが閉じるまでJSON等が表示されない
+    if (isStreaming) {
+      processed = removeIncompleteStreamingTags(processed);
+    }
+
+    // Remove completed quiz markers from display
     processed = removeQuizMarkerFromContent(processed);
 
     // アーティファクト形式のコードのみをプレースホルダーに置換
@@ -530,9 +538,13 @@ export function GenerationChatContainer({
                     message.role === "assistant" &&
                     !messages.slice(index + 1).some((m) => m.role === "assistant");
 
+                  // Determine if this message is currently streaming
+                  const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
+
                   // Process message content (remove quiz markers and artifact placeholders)
+                  // Pass streaming state to hide incomplete tags during streaming
                   const processedMessage = message.role === "assistant"
-                    ? { ...message, content: getProcessedContent(message.content) }
+                    ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
                     : message;
 
                   return (
