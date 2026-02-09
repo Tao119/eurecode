@@ -35,18 +35,28 @@ interface ChatMessageProps {
 }
 
 // Detect n-choice options from AI response using shared utility
-interface DetectedOptions {
-  contentWithoutOptions: string;
+// Supports multiple independent option sets (e.g., 質問1, 質問2)
+interface DetectedOptionSet {
+  question: string;
   options: { label: string; text: string }[];
 }
 
+interface DetectedOptions {
+  contentWithoutOptions: string;
+  optionSets: DetectedOptionSet[];
+}
+
 function detectOptions(content: string): DetectedOptions | null {
-  const result = extractQuizOptions(content);
-  if (!result) return null;
+  // Use extractMultipleQuizzes to handle multiple option sets
+  const result = extractMultipleQuizzes(content);
+  if (!result || result.quizzes.length === 0) return null;
 
   return {
-    contentWithoutOptions: result.contentWithoutOptions,
-    options: result.options,
+    contentWithoutOptions: result.contentWithoutQuizzes,
+    optionSets: result.quizzes.map(quiz => ({
+      question: quiz.question,
+      options: quiz.options,
+    })),
   };
 }
 
@@ -372,12 +382,21 @@ export const ChatMessage = memo(function ChatMessage({
           />
         )}
 
-        {/* Simple n-choice option buttons */}
-        {!interactiveQuiz && detectedOptions && detectedOptions.options.length > 0 && (
-          <OptionButtons
-            options={detectedOptions.options}
-            onSelect={onOptionSelect}
-          />
+        {/* Simple n-choice option buttons (supports multiple sets) */}
+        {!interactiveQuiz && detectedOptions && detectedOptions.optionSets.length > 0 && (
+          <div className="space-y-4">
+            {detectedOptions.optionSets.map((optionSet, index) => (
+              <div key={index}>
+                {detectedOptions.optionSets.length > 1 && optionSet.question && (
+                  <p className="text-sm text-muted-foreground mb-2">{optionSet.question}</p>
+                )}
+                <OptionButtons
+                  options={optionSet.options}
+                  onSelect={onOptionSelect}
+                />
+              </div>
+            ))}
+          </div>
         )}
 
         {message.metadata?.quiz && (
