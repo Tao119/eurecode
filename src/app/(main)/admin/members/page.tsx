@@ -948,7 +948,7 @@ export default function MembersPage() {
                   <p className="text-sm text-muted-foreground">学び数</p>
                 </div>
                 <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-2xl font-bold">{selectedMember.statistics.tokensUsedMonth.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">pt</span></p>
+                  <p className="text-2xl font-bold">{selectedMember.statistics.tokensUsedMonth.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">token</span></p>
                   <p className="text-sm text-muted-foreground">今月の使用量</p>
                 </div>
               </div>
