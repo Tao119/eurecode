@@ -12,7 +12,7 @@ export default function AuthLayout({
       <Header />
 
       {/* Main Content */}
-      <main className="flex-1 pt-14">
+      <main className="flex-1 pt-14 flex items-center justify-center px-4">
         {children}
       </main>
 
