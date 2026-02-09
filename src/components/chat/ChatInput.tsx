@@ -31,6 +31,24 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB for images
 const MAX_FILES = 5;
 
+// Extension to MIME type mapping (module-level to avoid recreation)
+const EXTENSION_TO_MIME: Record<string, FileMediaType> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  html: "text/html",
+  css: "text/css",
+  js: "text/javascript",
+  json: "application/json",
+  md: "text/markdown",
+  csv: "text/csv",
+  xml: "application/xml",
+};
+
 interface ChatInputProps {
   onSend: (message: string, attachments?: FileAttachment[]) => void;
   onStop?: () => void;
@@ -54,23 +72,7 @@ function getFileExtension(filename: string): string {
 }
 
 function getMimeTypeFromExtension(ext: string): FileMediaType | null {
-  const extensionMap: Record<string, FileMediaType> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    pdf: "application/pdf",
-    txt: "text/plain",
-    html: "text/html",
-    css: "text/css",
-    js: "text/javascript",
-    json: "application/json",
-    md: "text/markdown",
-    csv: "text/csv",
-    xml: "application/xml",
-  };
-  return extensionMap[ext] || null;
+  return EXTENSION_TO_MIME[ext] || null;
 }
 
 export function ChatInput({

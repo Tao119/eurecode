@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,39 +77,40 @@ export default function AdminDashboardPage() {
     fetchPendingRequests();
   }, []);
 
-  const stats = data
-    ? [
-        {
-          title: "アクティブメンバー",
-          value: `${data.statistics.activeMembers}/${data.statistics.totalMembers}`,
-          icon: "group",
-          color: "text-blue-400",
-          bgColor: "bg-blue-500/20",
-        },
-        {
-          title: "発行キー数",
-          value: data.statistics.totalKeys.toString(),
-          subText: `未使用: ${data.statistics.keysByStatus.active}`,
-          icon: "key",
-          color: "text-green-400",
-          bgColor: "bg-green-500/20",
-        },
-        {
-          title: "今月のポイント使用量",
-          value: `${data.statistics.monthlyTokenUsage.toLocaleString()} pt`,
-          icon: "toll",
-          color: "text-yellow-400",
-          bgColor: "bg-yellow-500/20",
-        },
-        {
-          title: "総会話数",
-          value: data.statistics.totalConversations.toLocaleString(),
-          icon: "chat",
-          color: "text-purple-400",
-          bgColor: "bg-purple-500/20",
-        },
-      ]
-    : [];
+  const stats = useMemo(() => {
+    if (!data) return [];
+    return [
+      {
+        title: "アクティブメンバー",
+        value: `${data.statistics.activeMembers}/${data.statistics.totalMembers}`,
+        icon: "group",
+        color: "text-blue-400",
+        bgColor: "bg-blue-500/20",
+      },
+      {
+        title: "発行キー数",
+        value: data.statistics.totalKeys.toString(),
+        subText: `未使用: ${data.statistics.keysByStatus.active}`,
+        icon: "key",
+        color: "text-green-400",
+        bgColor: "bg-green-500/20",
+      },
+      {
+        title: "今月のポイント使用量",
+        value: `${data.statistics.monthlyTokenUsage.toLocaleString()} pt`,
+        icon: "toll",
+        color: "text-yellow-400",
+        bgColor: "bg-yellow-500/20",
+      },
+      {
+        title: "総会話数",
+        value: data.statistics.totalConversations.toLocaleString(),
+        icon: "chat",
+        color: "text-purple-400",
+        bgColor: "bg-purple-500/20",
+      },
+    ];
+  }, [data]);
 
   if (loading) {
     return (
