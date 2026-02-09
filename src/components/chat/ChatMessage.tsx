@@ -274,16 +274,18 @@ export const ChatMessage = memo(function ChatMessage({
   // Regular code blocks should NOT be locked - only show normally
   const shouldLockCode = false; // Disabled: artifacts use the right panel now
 
-  // Only detect quizzes if enabled in user settings (for explanation mode)
-  const shouldShowQuiz = quizEnabled && mode !== "generation"; // Generation mode has its own quiz system
+  // Only detect interactive quizzes in explanation mode (generation mode has its own quiz system)
+  const shouldShowInteractiveQuiz = quizEnabled && mode !== "generation";
+  // Simple options (A/B/C/D) should work in all modes
+  const shouldShowSimpleOptions = quizEnabled;
 
-  // First try to detect interactive quiz (multiple question types)
-  const interactiveQuiz = isAssistant && !isStreaming && shouldShowQuiz
+  // First try to detect interactive quiz (multiple question types) - explanation mode only
+  const interactiveQuiz = isAssistant && !isStreaming && shouldShowInteractiveQuiz
     ? detectInteractiveQuiz(message.content)
     : null;
 
-  // Fall back to simple n-choice detection if no interactive quiz
-  const detectedOptions = isAssistant && !isStreaming && shouldShowQuiz && !interactiveQuiz
+  // Fall back to simple n-choice detection if no interactive quiz - all modes
+  const detectedOptions = isAssistant && !isStreaming && shouldShowSimpleOptions && !interactiveQuiz
     ? detectOptions(message.content)
     : null;
 
