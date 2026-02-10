@@ -77,6 +77,16 @@ export default function SettingsPage() {
   const [isDeletingHistory, setIsDeletingHistory] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
+  // Point request state (for members)
+  const [requestPoints, setRequestPoints] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<{
+    requestedPoints: number;
+    createdAt: string;
+  } | null>(null);
+  const [isLoadingRequest, setIsLoadingRequest] = useState(false);
+
   // Admin to individual conversion state
   const [showConvertToIndividualDialog, setShowConvertToIndividualDialog] = useState(false);
   const [convertConfirm, setConvertConfirm] = useState("");
@@ -115,6 +125,34 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchOrgInfo();
   }, [fetchOrgInfo]);
+
+  // Fetch pending request for members
+  useEffect(() => {
+    if (session?.user.userType !== "member") return;
+
+    setIsLoadingRequest(true);
+    fetch("/api/billing/credits/allocation/request")
+      .then((res) => res.json())
+      .then((data) => {
+        const pending = data.requests?.find(
+          (r: { status: string }) => r.status === "pending"
+        );
+        if (pending) {
+          setPendingRequest({
+            requestedPoints: pending.requestedPoints,
+            createdAt: pending.createdAt,
+          });
+        } else {
+          setPendingRequest(null);
+        }
+      })
+      .catch((err) => {
+        console.error("[Settings] Failed to check pending request:", err);
+      })
+      .finally(() => {
+        setIsLoadingRequest(false);
+      });
+  }, [session?.user.userType]);
 
 
   if (status === "loading") {
@@ -407,6 +445,43 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSubmitPointRequest = async () => {
+    const points = parseFloat(requestPoints);
+    if (!points || points <= 0) {
+      toast.error("有効なポイント数を入力してください");
+      return;
+    }
+
+    setIsSubmittingRequest(true);
+    try {
+      const response = await fetch("/api/billing/credits/allocation/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestedPoints: points,
+          reason: requestReason.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success("リクエストを送信しました");
+        setPendingRequest({
+          requestedPoints: points,
+          createdAt: new Date().toISOString(),
+        });
+        setRequestPoints("");
+        setRequestReason("");
+      } else {
+        toast.error(data.errorJa || data.error || "リクエストに失敗しました");
+      }
+    } catch {
+      toast.error("エラーが発生しました");
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
   const isIndividual = session?.user.userType === "individual";
   const isMember = session?.user.userType === "member";
   const isAdmin = session?.user.userType === "admin";
@@ -646,6 +721,107 @@ export default function SettingsPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Point Request - メンバーのみ表示 */}
+      {isMember && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="material-symbols-outlined">toll</span>
+              ポイントリクエスト
+            </CardTitle>
+            <CardDescription>
+              管理者に追加ポイントをリクエストできます
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingRequest ? (
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner size="sm" />
+              </div>
+            ) : pendingRequest ? (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="size-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-yellow-600">schedule</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium">リクエスト送信済み</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {pendingRequest.requestedPoints.toLocaleString()} pt のリクエストを送信しました。
+                      管理者の承認をお待ちください。
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      送信日時: {new Date(pendingRequest.createdAt).toLocaleDateString("ja-JP", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    追加のポイントが必要な場合、管理者にリクエストを送信できます。
+                    管理者が承認すると、ポイントが追加されます。
+                  </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="requestPoints" className="text-sm font-medium">
+                        リクエストポイント数
+                      </Label>
+                      <Input
+                        id="requestPoints"
+                        type="number"
+                        min="1"
+                        placeholder="例: 100"
+                        value={requestPoints}
+                        onChange={(e) => setRequestPoints(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="requestReason" className="text-sm font-medium">
+                        理由（任意）
+                      </Label>
+                      <textarea
+                        id="requestReason"
+                        value={requestReason}
+                        onChange={(e) => setRequestReason(e.target.value)}
+                        placeholder="ポイントが必要な理由..."
+                        className="mt-1 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleSubmitPointRequest}
+                      disabled={isSubmittingRequest || !requestPoints}
+                      className="w-full"
+                    >
+                      {isSubmittingRequest ? (
+                        <>
+                          <LoadingSpinner size="sm" className="mr-2" />
+                          送信中...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined mr-2 text-lg">send</span>
+                          リクエストを送信
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Learning Settings - メンバーには非表示 */}
       {!isMember && (
