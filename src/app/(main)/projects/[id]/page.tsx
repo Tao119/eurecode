@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FullPageLoading } from "@/components/common/LoadingSpinner";
 import { TaskBoard, TaskTimer, EstimationDashboard } from "@/components/projects";
 import { useProject } from "@/hooks/useProjects";
@@ -66,6 +72,11 @@ export default function ProjectDetailPage() {
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [conversations, setConversations] = useState<ProjectConversation[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [showChatListModal, setShowChatListModal] = useState(false);
+  const [allConversations, setAllConversations] = useState<ProjectConversation[]>([]);
+  const [isLoadingAllConversations, setIsLoadingAllConversations] = useState(false);
+  const [chatListFilter, setChatListFilter] = useState<ChatMode | "all">("all");
+  const [chatListSearch, setChatListSearch] = useState("");
 
   // 関連会話を取得
   useEffect(() => {
@@ -88,6 +99,49 @@ export default function ProjectDetailPage() {
 
     fetchConversations();
   }, [session?.user?.id, projectId]);
+
+  // 全会話を取得（モーダル用）
+  const fetchAllConversations = useCallback(async () => {
+    if (!session?.user?.id || !projectId) return;
+
+    setIsLoadingAllConversations(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/conversations?limit=100`);
+      const data = await response.json();
+      if (data.success) {
+        setAllConversations(data.data.items);
+      }
+    } catch (error) {
+      console.error("Failed to fetch all conversations:", error);
+    } finally {
+      setIsLoadingAllConversations(false);
+    }
+  }, [session?.user?.id, projectId]);
+
+  // モーダルが開いたら全会話を取得
+  useEffect(() => {
+    if (showChatListModal && allConversations.length === 0) {
+      fetchAllConversations();
+    }
+  }, [showChatListModal, allConversations.length, fetchAllConversations]);
+
+  // フィルター済みの会話リスト
+  const filteredAllConversations = useMemo(() => {
+    let filtered = allConversations;
+
+    if (chatListFilter !== "all") {
+      filtered = filtered.filter((c) => c.mode === chatListFilter);
+    }
+
+    if (chatListSearch.trim()) {
+      const query = chatListSearch.toLowerCase();
+      filtered = filtered.filter((c) =>
+        c.title?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [allConversations, chatListFilter, chatListSearch]);
 
   // Get top-level tasks (no parent)
   const topLevelTasks = useMemo(() => {
@@ -348,10 +402,23 @@ export default function ProjectDetailPage() {
           {/* 関連会話 */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <span className="material-symbols-outlined text-base">chat</span>
-                関連するチャット
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">chat</span>
+                  関連するチャット
+                </CardTitle>
+                {conversations.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setShowChatListModal(true)}
+                  >
+                    <span className="material-symbols-outlined text-sm mr-1">list</span>
+                    一覧
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* 新規チャット開始ボタン */}
@@ -429,6 +496,142 @@ export default function ProjectDetailPage() {
           }}
         />
       )}
+
+      {/* Chat List Modal */}
+      <Dialog open={showChatListModal} onOpenChange={setShowChatListModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg">chat</span>
+              関連するチャット一覧
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Filter and Search */}
+          <div className="flex flex-col sm:flex-row gap-3 py-2">
+            <div className="flex gap-1 flex-wrap">
+              <Button
+                variant={chatListFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setChatListFilter("all")}
+                className="h-8"
+              >
+                すべて
+              </Button>
+              <Button
+                variant={chatListFilter === "explanation" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setChatListFilter("explanation")}
+                className="h-8 gap-1"
+              >
+                <span className="material-symbols-outlined text-sm text-blue-400">school</span>
+                解説
+              </Button>
+              <Button
+                variant={chatListFilter === "generation" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setChatListFilter("generation")}
+                className="h-8 gap-1"
+              >
+                <span className="material-symbols-outlined text-sm text-yellow-400">code</span>
+                生成
+              </Button>
+              <Button
+                variant={chatListFilter === "brainstorm" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setChatListFilter("brainstorm")}
+                className="h-8 gap-1"
+              >
+                <span className="material-symbols-outlined text-sm text-purple-400">lightbulb</span>
+                壁打ち
+              </Button>
+            </div>
+            <div className="flex-1">
+              <Input
+                placeholder="チャットを検索..."
+                value={chatListSearch}
+                onChange={(e) => setChatListSearch(e.target.value)}
+                className="h-8"
+              />
+            </div>
+          </div>
+
+          {/* Conversation List */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {isLoadingAllConversations ? (
+              <div className="flex items-center justify-center py-12">
+                <span className="material-symbols-outlined animate-spin text-2xl text-muted-foreground">
+                  progress_activity
+                </span>
+              </div>
+            ) : filteredAllConversations.length > 0 ? (
+              <div className="space-y-2 pr-2">
+                {filteredAllConversations.map((conv) => {
+                  const modeInfo = MODE_ICONS[conv.mode];
+                  return (
+                    <Link
+                      key={conv.id}
+                      href={`/chat/${conv.mode}/${conv.id}`}
+                      onClick={() => setShowChatListModal(false)}
+                      className="block p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cn("material-symbols-outlined text-sm", modeInfo.color)}>
+                              {modeInfo.icon}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{modeInfo.label}</span>
+                          </div>
+                          <p className="font-medium line-clamp-2">
+                            {conv.title || "無題の会話"}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(conv.updatedAt).toLocaleDateString("ja-JP", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </p>
+                          {conv.learningsCount > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              <span className="material-symbols-outlined text-xs align-middle mr-0.5">
+                                school
+                              </span>
+                              {conv.learningsCount}件の学び
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <span className="material-symbols-outlined text-4xl mb-2">chat_bubble_outline</span>
+                <p className="text-sm">
+                  {chatListSearch || chatListFilter !== "all"
+                    ? "条件に一致するチャットがありません"
+                    : "関連するチャットがありません"}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
+          {filteredAllConversations.length > 0 && (
+            <div className="pt-3 border-t text-xs text-muted-foreground">
+              {filteredAllConversations.length}件のチャット
+              {allConversations.length !== filteredAllConversations.length && (
+                <span> （全{allConversations.length}件中）</span>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
