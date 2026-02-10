@@ -4,7 +4,8 @@ import type { MessageParam, ContentBlockParam, ImageBlockParam, DocumentBlockPar
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { systemPrompts, brainstormSubModePrompts } from "@/lib/prompts";
+import { systemPrompts, brainstormSubModePrompts, LEVEL_PROMPT_MODIFIERS, QUIZ_DIFFICULTY_PROMPTS } from "@/lib/prompts";
+import { DEVELOPMENT_LEVELS, type DevelopmentLevel } from "@/types/user";
 import type { BrainstormSubMode, ClaudeModel } from "@/types/chat";
 import { getModelId, DEFAULT_MODEL } from "@/types/chat";
 import { estimateTokens } from "@/lib/token-limit";
@@ -235,11 +236,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // スキップモードかどうかを判定
+    // スキップモードと開発レベルを判定
     let isSkipMode = false;
+    let developmentLevel: DevelopmentLevel = "intermediate"; // デフォルトは中級
     if (user) {
-      const userSettings = user.settings as { unlockSkipAllowed?: boolean; allowedModes?: string[] } | null;
+      const userSettings = user.settings as { unlockSkipAllowed?: boolean; allowedModes?: string[]; developmentLevel?: DevelopmentLevel } | null;
       isSkipMode = userSettings?.unlockSkipAllowed ?? false;
+      developmentLevel = userSettings?.developmentLevel ?? "intermediate";
 
       // メンバーユーザーはAPIキーの設定を優先
       if (user.userType === "member" && user.accessKey?.settings) {
@@ -344,6 +347,15 @@ ${activeArtifact.language ? `- 言語: ${activeArtifact.language}` : ""}
         } catch (error) {
           console.error("Failed to build RAG context:", error);
         }
+      }
+
+      // 開発レベルに応じたプロンプト補足を追加
+      basePrompt += LEVEL_PROMPT_MODIFIERS[developmentLevel];
+
+      // 生成モードでクイズが有効な場合、クイズ難易度のプロンプトも追加
+      if (mode === "generation" && !isSkipMode) {
+        const levelConfig = DEVELOPMENT_LEVELS[developmentLevel];
+        basePrompt += QUIZ_DIFFICULTY_PROMPTS[levelConfig.quizDifficulty];
       }
 
       return basePrompt;

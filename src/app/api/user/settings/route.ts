@@ -13,6 +13,7 @@ const updateSettingsSchema = z.object({
   hintSpeed: z.enum(["immediate", "30sec", "none"]).optional(),
   estimationTraining: z.boolean().optional(),
   unlockSkipAllowed: z.boolean().optional(),
+  developmentLevel: z.enum(["beginner", "elementary", "intermediate", "advanced", "expert"]).optional(),
 });
 
 // GET /api/user/settings - Get user settings

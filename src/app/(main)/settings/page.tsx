@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useUserSettings } from "@/contexts/UserSettingsContext";
-import type { UserSettings } from "@/types/user";
+import type { UserSettings, DevelopmentLevel } from "@/types/user";
+import { DEVELOPMENT_LEVELS } from "@/types/user";
 
 type LearningSettingKey = "quizEnabled" | "estimationTraining" | "unlockSkipAllowed";
 type HintSpeedValue = UserSettings["hintSpeed"];
@@ -154,6 +155,15 @@ export default function SettingsPage() {
     try {
       await updateSettings({ hintSpeed: value });
       toast.success("設定を更新しました");
+    } catch {
+      toast.error("設定の更新に失敗しました");
+    }
+  };
+
+  const handleDevelopmentLevelChange = async (value: DevelopmentLevel) => {
+    try {
+      await updateSettings({ developmentLevel: value });
+      toast.success("開発レベルを更新しました");
     } catch {
       toast.error("設定の更新に失敗しました");
     }
@@ -656,6 +666,17 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
+                <SettingSelect
+                  icon="trending_up"
+                  title="開発レベル"
+                  description="あなたのスキルレベルに合わせてAIの説明やクイズ難易度を調整します"
+                  value={settings.developmentLevel}
+                  options={Object.entries(DEVELOPMENT_LEVELS).map(([key, config]) => ({
+                    value: key,
+                    label: `${config.labelJa} - ${config.description}`,
+                  }))}
+                  onChange={(value) => handleDevelopmentLevelChange(value as DevelopmentLevel)}
+                />
                 <SettingToggle
                   icon="quiz"
                   title="確認クイズ"

@@ -14,6 +14,7 @@ interface UserSettings {
   skipAllowed?: boolean;
   isEnabled?: boolean;
   allowedModes?: ("explanation" | "generation" | "brainstorm")[];
+  developmentLevel?: "beginner" | "elementary" | "intermediate" | "advanced" | "expert";
   [key: string]: unknown;
 }
 
@@ -206,6 +207,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           skipAllowed: memberSettings.skipAllowed ?? false,
           isEnabled: memberSettings.isEnabled !== false, // default to true
           allowedModes: memberSettings.allowedModes ?? ["explanation", "generation", "brainstorm"],
+          developmentLevel: memberSettings.developmentLevel ?? "intermediate",
         },
         accessKey: member.accessKey
           ? {
@@ -269,6 +271,7 @@ const updateMemberSchema = z.object({
   skipAllowed: z.boolean().optional(),
   isEnabled: z.boolean().optional(),
   allowedModes: z.array(z.enum(["explanation", "generation", "brainstorm"])).optional(),
+  developmentLevel: z.enum(["beginner", "elementary", "intermediate", "advanced", "expert"]).optional(),
 });
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -338,6 +341,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ...(parsed.data.skipAllowed !== undefined && { skipAllowed: parsed.data.skipAllowed }),
       ...(parsed.data.isEnabled !== undefined && { isEnabled: parsed.data.isEnabled }),
       ...(parsed.data.allowedModes !== undefined && { allowedModes: parsed.data.allowedModes }),
+      ...(parsed.data.developmentLevel !== undefined && { developmentLevel: parsed.data.developmentLevel }),
     };
 
     // Update member settings
@@ -356,6 +360,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         skipAllowed: updatedSettings.skipAllowed ?? false,
         isEnabled: updatedSettings.isEnabled !== false,
         allowedModes: updatedSettings.allowedModes ?? ["explanation", "generation", "brainstorm"],
+        developmentLevel: updatedSettings.developmentLevel ?? "intermediate",
       },
     });
   } catch (error) {

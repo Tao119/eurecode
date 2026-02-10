@@ -48,6 +48,16 @@ interface Member {
 
 type ChatMode = "explanation" | "generation" | "brainstorm";
 
+type DevelopmentLevel = "beginner" | "elementary" | "intermediate" | "advanced" | "expert";
+
+const DEVELOPMENT_LEVEL_OPTIONS: { value: DevelopmentLevel; label: string }[] = [
+  { value: "beginner", label: "入門" },
+  { value: "elementary", label: "初級" },
+  { value: "intermediate", label: "中級" },
+  { value: "advanced", label: "上級" },
+  { value: "expert", label: "エキスパート" },
+];
+
 interface MemberDetail {
   member: {
     id: string;
@@ -60,6 +70,7 @@ interface MemberDetail {
     skipAllowed: boolean;
     isEnabled: boolean;
     allowedModes: ChatMode[];
+    developmentLevel: DevelopmentLevel;
   };
   accessKey: {
     id: string;
@@ -168,6 +179,28 @@ export default function MembersPage() {
             member: { ...selectedMember.member, skipAllowed: newValue },
           });
         });
+      }
+    } catch (error) {
+      console.error("Failed to toggle skip allowed:", error);
+    }
+  };
+
+  const handleDevelopmentLevelChange = async (memberId: string, newLevel: DevelopmentLevel) => {
+    try {
+      const response = await fetch(`/api/admin/members/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ developmentLevel: newLevel }),
+      });
+      const result = await response.json();
+      if (result.success && selectedMember) {
+        startTransition(() => {
+          setSelectedMember({
+            ...selectedMember,
+            member: { ...selectedMember.member, developmentLevel: newLevel },
+          });
+        });
+        toast.success("開発レベルを更新しました");
       }
     } catch (error) {
       console.error("Failed to update skip allowed:", error);
@@ -935,6 +968,33 @@ export default function MembersPage() {
                       )}
                     />
                   </button>
+                </div>
+
+                {/* Development Level */}
+                <div className="pt-3 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="font-medium text-sm">開発レベル</p>
+                      <p className="text-xs text-muted-foreground">
+                        メンバーのスキルに合わせてAIの説明やクイズ難易度を調整します
+                      </p>
+                    </div>
+                  </div>
+                  <select
+                    value={selectedMember.member.developmentLevel}
+                    onChange={(e) => handleDevelopmentLevelChange(selectedMember.member.id, e.target.value as DevelopmentLevel)}
+                    disabled={isPending}
+                    className={cn(
+                      "w-full h-9 px-3 rounded-md border border-border bg-background text-sm",
+                      isPending && "opacity-50"
+                    )}
+                  >
+                    {DEVELOPMENT_LEVEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Password Reset */}
