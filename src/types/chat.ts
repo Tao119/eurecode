@@ -457,6 +457,16 @@ export interface ConversationMetadata {
   lastActiveBranchId?: string;
   // 会話コンパクティングの要約
   compactSummary?: ConversationCompactSummary;
+  // 壁打ちモードのまとめ履歴
+  summaries?: ConversationSummary[];
+}
+
+// 会話のまとめ
+export interface ConversationSummary {
+  id: string;
+  content: string;
+  createdAt: string;
+  subMode?: BrainstormSubMode;
 }
 
 // 壁打ちモードの状態（永続化用）

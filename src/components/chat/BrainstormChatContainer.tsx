@@ -761,6 +761,7 @@ export function BrainstormChatContainer({
         onOpenChange={setShowSummaryModal}
         messages={messages}
         brainstormState={state}
+        conversationId={conversationId}
       />
     </div>
   );

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import type { BrainstormSubMode, BrainstormModeState } from "@/types/chat";
+import type { ConversationMetadata, ConversationSummary } from "@/types/chat";
 import { rateLimiters, rateLimitErrorResponse } from "@/lib/rate-limit";
 
 // 要約生成用のシステムプロンプト
@@ -52,6 +53,7 @@ const messageSchema = z.object({
 });
 
 const summarizeRequestSchema = z.object({
+  conversationId: z.string().optional(),
   messages: z.array(messageSchema).min(1).max(100),
   brainstormState: z.object({
     subMode: z.enum(["casual", "planning"]),
@@ -66,6 +68,7 @@ const summarizeRequestSchema = z.object({
       estimatedTime: z.string().optional(),
     })).optional(),
   }).optional(),
+  saveSummary: z.boolean().optional().default(true),
 });
 
 export async function POST(request: NextRequest) {
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, brainstormState } = parsed.data;
+    const { conversationId, messages, brainstormState, saveSummary } = parsed.data;
 
     // Check if API key is configured
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -152,15 +155,112 @@ export async function POST(request: NextRequest) {
       .map((block) => block.text)
       .join("\n");
 
+    // Save summary to conversation metadata if conversationId is provided
+    let savedSummary: ConversationSummary | null = null;
+    if (conversationId && saveSummary) {
+      try {
+        const conversation = await prisma.conversation.findFirst({
+          where: {
+            id: conversationId,
+            userId: session.user.id,
+          },
+          select: { metadata: true },
+        });
+
+        if (conversation) {
+          const metadata = (conversation.metadata as unknown as ConversationMetadata) || {};
+          const existingSummaries = metadata.summaries || [];
+
+          savedSummary = {
+            id: crypto.randomUUID(),
+            content: summary,
+            createdAt: new Date().toISOString(),
+            subMode: brainstormState?.subMode,
+          };
+
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              metadata: {
+                ...metadata,
+                summaries: [...existingSummaries, savedSummary],
+              } as any,
+            },
+          });
+        }
+      } catch (saveError) {
+        console.error("Failed to save summary:", saveError);
+        // Continue without saving - not a critical error
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         summary,
+        summaryId: savedSummary?.id || null,
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
       },
     });
   } catch (error) {
     console.error("Summarize API error:", error);
+    return NextResponse.json(
+      { success: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
+      { status: 500 }
+    );
+  }
+}
+
+// GET /api/chat/summarize?conversationId=xxx - Get past summaries for a conversation
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json(
+        { success: false, error: { code: "UNAUTHORIZED", message: "認証が必要です" } },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const conversationId = searchParams.get("conversationId");
+
+    if (!conversationId) {
+      return NextResponse.json(
+        { success: false, error: { code: "VALIDATION_ERROR", message: "conversationId is required" } },
+        { status: 400 }
+      );
+    }
+
+    const conversation = await prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        userId: session.user.id,
+      },
+      select: { metadata: true },
+    });
+
+    if (!conversation) {
+      return NextResponse.json(
+        { success: false, error: { code: "NOT_FOUND", message: "Conversation not found" } },
+        { status: 404 }
+      );
+    }
+
+    const metadata = (conversation.metadata as unknown as ConversationMetadata) || {};
+    const summaries = metadata.summaries || [];
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        summaries: summaries.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Get summaries error:", error);
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
       { status: 500 }
