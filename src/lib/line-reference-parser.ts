@@ -128,13 +128,17 @@ export interface ExtractedCodeBlock {
 
 export function extractCodeBlocks(content: string): ExtractedCodeBlock[] {
   const codeBlocks: ExtractedCodeBlock[] = [];
-  const pattern = /```(\w*)\n?([\s\S]*?)```/g;
+  // パターンを改良: 言語タグの後の最初の改行のみを消費
+  const pattern = /```(\w*)\n([\s\S]*?)```/g;
 
   let match;
   while ((match = pattern.exec(content)) !== null) {
+    // 行番号を保持するため、先頭のコンテンツは保持し、末尾の空白のみ削除
+    // これにより、AIが参照する行番号とパネルに表示される行番号が一致する
+    const code = match[2].trimEnd();
     codeBlocks.push({
       language: match[1] || "text",
-      code: match[2].trim(),
+      code,
       startIndex: match.index,
       endIndex: match.index + match[0].length,
     });
@@ -155,13 +159,14 @@ export function extractFirstCodeBlock(content: string): ExtractedCodeBlock | nul
  * AI応答から<!--EXPLAIN_CODE-->タグを検出
  */
 export function extractExplainCodeFromAI(content: string): ExtractedCodeBlock | null {
-  const pattern = /<!--EXPLAIN_CODE:(\w*)-->\n?([\s\S]*?)<!--\/EXPLAIN_CODE-->/;
+  const pattern = /<!--EXPLAIN_CODE:(\w*)-->\n([\s\S]*?)<!--\/EXPLAIN_CODE-->/;
   const match = content.match(pattern);
 
   if (match) {
     return {
       language: match[1] || "text",
-      code: match[2].trim(),
+      // 行番号を保持するため末尾の空白のみ削除
+      code: match[2].trimEnd(),
       startIndex: match.index || 0,
       endIndex: (match.index || 0) + match[0].length,
     };
