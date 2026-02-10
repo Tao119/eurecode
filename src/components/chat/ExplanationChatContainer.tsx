@@ -8,6 +8,8 @@ import { ExplanationCodePanel, MobileExplanationCodeSheet } from "./ExplanationC
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useExplanationMode } from "@/hooks/useExplanationMode";
 import { parseLineReferences, findFirstCodeBlockInMessages } from "@/lib/line-reference-parser";
+import { parseArtifacts } from "@/lib/artifacts";
+import { removeIncompleteStreamingTags } from "@/lib/quiz-generator";
 import { MODE_CONFIG } from "@/config/modes";
 import type { Message, ConversationBranch, FileAttachment } from "@/types/chat";
 import { cn } from "@/lib/utils";
@@ -154,6 +156,23 @@ export function ExplanationChatContainer({
     [toggleBookmark]
   );
 
+  // チャットメッセージを処理（アーティファクトを非表示）
+  // ストリーミング中は不完全なタグを隠す
+  const getProcessedContent = useCallback((content: string, isStreaming: boolean = false) => {
+    let processed = content;
+
+    // ストリーミング中: 不完全なタグを隠す
+    if (isStreaming) {
+      processed = removeIncompleteStreamingTags(processed);
+    }
+
+    // アーティファクト形式のコードをプレースホルダーに置換
+    const { contentWithoutArtifacts } = parseArtifacts(processed);
+    processed = contentWithoutArtifacts;
+
+    return processed;
+  }, []);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header - z-30 to ensure dropdowns appear above main content */}
@@ -243,11 +262,20 @@ export function ExplanationChatContainer({
                     message.role === "assistant" &&
                     !messages.slice(index + 1).some((m) => m.role === "assistant");
 
+                  // Determine if this message is currently streaming
+                  const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
+
+                  // Process message content (remove artifact placeholders)
+                  // Pass streaming state to hide incomplete tags during streaming
+                  const processedMessage = message.role === "assistant"
+                    ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
+                    : message;
+
                   return (
                     <div key={message.id || index} id={`msg-${index}`}>
                       <ChatMessage
-                        message={message}
-                        isStreaming={isLoading && index === messages.length - 1 && message.role === "assistant"}
+                        message={processedMessage}
+                        isStreaming={isMessageStreaming}
                         onOptionSelect={!isLoading && isLastAssistantMessage ? onSendMessage : undefined}
                         onFork={onForkFromMessage ? () => onForkFromMessage(index) : undefined}
                         showForkButton={!isLoading && index < messages.length - 1}

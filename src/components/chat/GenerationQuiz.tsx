@@ -216,6 +216,14 @@ export function GenerationQuiz({
           })}
         </div>
 
+        {/* 手動入力の案内（回答前のみ表示） */}
+        {!showResult && (
+          <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm">tips_and_updates</span>
+            チャットで自分の考えを入力して回答することもできます
+          </p>
+        )}
+
         {/* 結果表示 */}
         {showResult && (
           <div className={cn(
