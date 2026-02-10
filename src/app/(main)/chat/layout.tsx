@@ -33,9 +33,10 @@ export default function ChatLayout({
     return null;
   }
 
-  // チャット画面は全画面表示（ヘッダー56px = 3.5remを除く）
+  // チャット画面は固定レイアウト（ヘッダー56px = 3.5rem下から画面最下部まで）
+  // fixed で親のスクロールから独立させ、入力バーを常に画面最下部に固定
   return (
-    <div className="h-[calc(100dvh-3.5rem)] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 top-14 flex flex-col overflow-hidden bg-background">
       <ChatWithCredits>
         {children}
       </ChatWithCredits>

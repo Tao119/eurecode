@@ -6,18 +6,11 @@ import { usePathname } from "next/navigation";
 export function Footer() {
   const pathname = usePathname();
 
-  // チャット画面ではモバイルでフッターを非表示
+  // チャット画面ではフッターを完全に非表示
   const isChatPage = pathname?.startsWith("/chat");
 
   if (isChatPage) {
-    // チャット画面では最小限のフッターのみ表示（デスクトップのみ）
-    return (
-      <footer className="hidden sm:block border-t border-border bg-muted/50 py-4">
-        <div className="mx-auto max-w-7xl px-4 text-center text-sm text-muted-foreground">
-          © 2026 Eurecode. All rights reserved.
-        </div>
-      </footer>
-    );
+    return null;
   }
 
   return (
