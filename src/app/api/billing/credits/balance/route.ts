@@ -32,8 +32,9 @@ export async function GET() {
     const userId = session.user.id;
     const userType = session.user.userType;
     const isOrganizationMember = userType === "member";
-    // 管理者またはメンバーで組織に所属 → 組織の割り当て制を使用
-    const hasOrganizationAllocation = (userType === "member" || userType === "admin");
+    const isOrganizationAdmin = userType === "admin";
+    // メンバーのみ割り当て制を使用（管理者は組織のcreditBalanceを直接使用）
+    const usesAllocationSystem = userType === "member";
 
     // ユーザー情報とサブスクリプション取得
     const user = await prisma.user.findUnique({
@@ -59,7 +60,7 @@ export async function GET() {
     let isOrganization = false;
     let monthlyPoints = 0;
 
-    if (hasOrganizationAllocation && user.organizationId && user.organization) {
+    if ((usesAllocationSystem || isOrganizationAdmin) && user.organizationId && user.organization) {
       // 組織メンバーまたは管理者
       isOrganization = true;
       plan = user.organization.plan;
@@ -79,22 +80,26 @@ export async function GET() {
     }
 
     // クレジット残高取得
-    // 組織所属ユーザー（管理者・メンバー）は割り当て制のため個別残高は使わない
-    const creditBalance = (hasOrganizationAllocation && user.organizationId)
-      ? null
-      : user.creditBalance || (user.organization?.creditBalance ?? null);
+    // - 組織メンバー: 割り当て制を使用（creditBalanceは参照しない）
+    // - 組織管理者: 組織のcreditBalanceを直接使用
+    // - 個人ユーザー: 個人のcreditBalanceを使用
+    const creditBalance = usesAllocationSystem
+      ? null  // メンバーは割り当て制のためcreditBalanceは不要
+      : isOrganizationAdmin && user.organization?.creditBalance
+        ? user.organization.creditBalance  // 管理者は組織のcreditBalanceを使用
+        : user.creditBalance || null;  // 個人ユーザー
 
     // 今月の使用量を計算
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // 組織メンバーの場合は割り当てを取得
+    // 組織メンバーの場合のみ割り当てを取得（管理者は組織のcreditBalanceを直接使用）
     // 割り当てがない場合はデフォルト0（組織のプールではなく個別割り当て制）
     let allocatedPoints: number | undefined;
     let allocatedUsed = 0;
 
-    if (hasOrganizationAllocation && user.organizationId) {
+    if (usesAllocationSystem && user.organizationId) {
       const allocation = await prisma.creditAllocation.findFirst({
         where: {
           organizationId: user.organizationId,
@@ -107,7 +112,7 @@ export async function GET() {
       if (allocation) {
         allocatedPoints = allocation.allocatedPoints;
         allocatedUsed = allocation.usedPoints;
-      } else if (userType === "member") {
+      } else {
         // メンバーの場合：割り当てがなければアクセスキーのdailyTokenLimitから自動作成
         const accessKey = await prisma.accessKey.findFirst({
           where: { userId: userId },
@@ -134,11 +139,9 @@ export async function GET() {
         } else {
           allocatedPoints = 0;
         }
-      } else {
-        // 管理者の場合：割り当てがなければ0（管理画面から自分で設定する）
-        allocatedPoints = 0;
       }
     }
+    // 管理者の場合は allocatedPoints を undefined のままにする（creditBalanceを使用）
 
     // 残りポイント計算
     const planPointsRemaining = creditBalance
@@ -161,7 +164,8 @@ export async function GET() {
       planPointsRemaining,
       purchasedPointsRemaining,
       allocatedPointsRemaining,
-      canPurchaseCredits: !(hasOrganizationAllocation && user.organizationId),
+      // メンバーは購入不可（管理者は組織として購入可能）
+      canPurchaseCredits: !usesAllocationSystem,
     };
 
     // 会話可能性チェック
