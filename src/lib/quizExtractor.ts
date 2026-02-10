@@ -63,16 +63,16 @@ export function extractQuizOptions(content: string): ExtractedQuiz | null {
   );
 
   let options: QuizOption[] = [];
-  let matchedPattern: RegExp | null = null;
   let matchedMatches: RegExpMatchArray[] = [];
 
-  // 各パターンを試して、最も多くの選択肢を抽出できるものを使用
+  // 各パターンからマッチを収集
   const patterns = [
     { regex: linePattern, name: "line" },
     { regex: inlinePattern, name: "inline" },
     { regex: parenPattern, name: "paren" },
   ];
 
+  // まず各パターンを単独で試す
   for (const { regex, name } of patterns) {
     const matches = [...content.matchAll(regex)];
 
@@ -90,10 +90,40 @@ export function extractQuizOptions(content: string): ExtractedQuiz | null {
           if (!allValid) continue;
         }
 
-        matchedPattern = regex;
         matchedMatches = matches;
         break; // 最初に成功したパターンを使用
       }
+    }
+  }
+
+  // 単独パターンで2-4個が見つからなかった場合、複数パターンをマージ
+  if (!matchedMatches.length) {
+    const allMatches: Map<string, RegExpMatchArray> = new Map();
+
+    for (const { regex, name } of patterns) {
+      const matches = [...content.matchAll(regex)];
+
+      for (const match of matches) {
+        const label = normalizeLabel(match[1]);
+        const text = match[2].trim();
+
+        // インラインパターンで長すぎるテキストはスキップ
+        if (name === "inline" && (text.length === 0 || text.length >= 200)) {
+          continue;
+        }
+
+        // まだ追加されていないラベルのみ追加
+        if (!allMatches.has(label)) {
+          allMatches.set(label, match);
+        }
+      }
+    }
+
+    // 2-4個のユニークな選択肢があれば採用
+    if (allMatches.size >= 2 && allMatches.size <= 4) {
+      // ラベル順にソート (A, B, C, D)
+      const sortedLabels = [...allMatches.keys()].sort();
+      matchedMatches = sortedLabels.map(label => allMatches.get(label)!);
     }
   }
 
