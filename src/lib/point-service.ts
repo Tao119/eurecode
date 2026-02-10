@@ -133,16 +133,20 @@ export async function getPointBalance(
   const purchasedBalance = creditBalance?.balance ?? 0;
   const purchasedUsed = creditBalance?.purchasedUsed ?? 0;
 
-  // 組織メンバーの場合は割り当てを確認
-  // 割り当てがない場合は0ポイント（組織のプールではなく個別割り当て制）
+  // 組織ユーザー（メンバーまたは管理者）の場合は割り当てを確認
+  // - メンバー: 割り当て必須（なければ0）
+  // - 管理者: 割り当てがあれば使用、なければ組織のcreditBalanceを使用（allocatedはundefined）
   let allocated: number | undefined;
   let allocatedUsed: number | undefined;
   let allocatedRemaining: number | undefined;
+  const isOrgAdmin = user.userType === "admin" && user.organization;
+  const effectiveOrgId = organizationId || user.organizationId;
 
-  if (isOrgMember && organizationId) {
+  if ((isOrgMember || isOrgAdmin) && effectiveOrgId) {
+    // メンバーまたは管理者の割り当てを確認
     const allocation = await prisma.creditAllocation.findFirst({
       where: {
-        organizationId,
+        organizationId: effectiveOrgId,
         userId,
         periodStart: { lte: now },
         periodEnd: { gte: now },
@@ -150,37 +154,17 @@ export async function getPointBalance(
     });
 
     if (allocation) {
+      // 割り当てがある場合（メンバーも管理者も）
       allocated = allocation.allocatedPoints;
       allocatedUsed = allocation.usedPoints;
       allocatedRemaining = Math.max(0, allocated - allocatedUsed);
-    } else {
-      // 割り当てがない場合は0ポイント
+    } else if (isOrgMember) {
+      // メンバーで割り当てがない場合は0ポイント
       allocated = 0;
       allocatedUsed = 0;
       allocatedRemaining = 0;
     }
-  } else if (isOrgMember && !organizationId) {
-    // organizationIdが渡されていない場合も確認
-    // userのorganizationIdを使用
-    const allocation = await prisma.creditAllocation.findFirst({
-      where: {
-        organizationId: user.organizationId!,
-        userId,
-        periodStart: { lte: now },
-        periodEnd: { gte: now },
-      },
-    });
-
-    if (allocation) {
-      allocated = allocation.allocatedPoints;
-      allocatedUsed = allocation.usedPoints;
-      allocatedRemaining = Math.max(0, allocated - allocatedUsed);
-    } else {
-      // 割り当てがない場合は0ポイント
-      allocated = 0;
-      allocatedUsed = 0;
-      allocatedRemaining = 0;
-    }
+    // 管理者で割り当てがない場合: allocatedはundefinedのまま（組織のcreditBalanceを使用）
   }
 
   const planRemaining = Math.max(0, planTotal - planUsed);

@@ -79,27 +79,28 @@ export async function GET() {
       monthlyPoints = INDIVIDUAL_PLANS.free.features.monthlyConversationPoints;
     }
 
-    // クレジット残高取得
-    // - 組織メンバー: 割り当て制を使用（creditBalanceは参照しない）
-    // - 組織管理者: 組織のcreditBalanceを直接使用
+    // クレジット残高取得（割り当て確認後に決定）
+    // - 組織メンバー/管理者で割り当てがある場合: creditBalanceは参照しない
+    // - 管理者で割り当てがない場合(adminUsesOrgPool): 組織のcreditBalanceを使用
     // - 個人ユーザー: 個人のcreditBalanceを使用
-    const creditBalance = usesAllocationSystem
-      ? null  // メンバーは割り当て制のためcreditBalanceは不要
-      : isOrganizationAdmin && user.organization?.creditBalance
-        ? user.organization.creditBalance  // 管理者は組織のcreditBalanceを使用
-        : user.creditBalance || null;  // 個人ユーザー
+    // 注: creditBalanceの取得は後で行う（割り当て確認後）
+    let creditBalance: typeof user.creditBalance | null = null;
 
     // 今月の使用量を計算
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // 組織メンバーの場合のみ割り当てを取得（管理者は組織のcreditBalanceを直接使用）
-    // 割り当てがない場合はデフォルト0（組織のプールではなく個別割り当て制）
+    // 組織ユーザー（メンバーまたは管理者）の場合は割り当てを確認
+    // - 割り当てがある場合: 割り当てを使用
+    // - メンバーで割り当てがない場合: アクセスキーから自動作成、なければ0
+    // - 管理者で割り当てがない場合: 組織のcreditBalanceを使用（allocatedPointsはundefined）
     let allocatedPoints: number | undefined;
     let allocatedUsed = 0;
+    let adminUsesOrgPool = false;  // 管理者が組織プールを使用するかどうか
 
-    if (usesAllocationSystem && user.organizationId) {
+    if ((usesAllocationSystem || isOrganizationAdmin) && user.organizationId) {
+      // まず割り当てを確認（メンバーも管理者も）
       const allocation = await prisma.creditAllocation.findFirst({
         where: {
           organizationId: user.organizationId,
@@ -110,9 +111,10 @@ export async function GET() {
       });
 
       if (allocation) {
+        // 割り当てがある場合は使用
         allocatedPoints = allocation.allocatedPoints;
         allocatedUsed = allocation.usedPoints;
-      } else {
+      } else if (usesAllocationSystem) {
         // メンバーの場合：割り当てがなければアクセスキーのdailyTokenLimitから自動作成
         const accessKey = await prisma.accessKey.findFirst({
           where: { userId: userId },
@@ -139,9 +141,21 @@ export async function GET() {
         } else {
           allocatedPoints = 0;
         }
+      } else {
+        // 管理者で割り当てがない場合: 組織のcreditBalanceを使用
+        adminUsesOrgPool = true;
       }
     }
-    // 管理者の場合は allocatedPoints を undefined のままにする（creditBalanceを使用）
+
+    // 割り当て確認後にcreditBalanceを決定
+    if (adminUsesOrgPool && user.organization?.creditBalance) {
+      // 管理者で割り当てがない場合: 組織のcreditBalanceを使用
+      creditBalance = user.organization.creditBalance;
+    } else if (!usesAllocationSystem && !isOrganizationAdmin) {
+      // 個人ユーザー: 個人のcreditBalanceを使用
+      creditBalance = user.creditBalance || null;
+    }
+    // メンバーまたは割り当てがある管理者: creditBalanceはnullのまま（割り当てを使用）
 
     // 残りポイント計算
     const planPointsRemaining = creditBalance
