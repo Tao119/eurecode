@@ -10,7 +10,7 @@ import { PlanStepList, SuggestedPlan } from "./PlanStepList";
 import { ProjectSaveModal } from "@/components/projects/ProjectSaveModal";
 import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
-import { exportBrainstormToMarkdown, downloadMarkdownFile } from "@/lib/markdown-exporter";
+import { BrainstormSummaryModal } from "./BrainstormSummaryModal";
 import {
   useBrainstormMode,
   BRAINSTORM_PHASES,
@@ -477,21 +477,12 @@ export function BrainstormChatContainer({
     setSuggestedSteps([]);
   }, [onSendMessage]);
 
-  // Markdownエクスポート
-  const handleExportMarkdown = useCallback(() => {
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const titleSlug = state.ideaSummary
-      ? state.ideaSummary.slice(0, 30).replace(/[/\\:*?"<>|]/g, "").trim()
-      : "";
-    const filename = `${timestamp}_${titleSlug || "brainstorm"}.md`;
+  // まとめモーダル表示
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
 
-    const markdown = exportBrainstormToMarkdown(messages, state, {
-      title: state.ideaSummary || "ブレインストーミング記録",
-      includeTimestamps: true,
-    });
-
-    downloadMarkdownFile(markdown, filename);
-  }, [messages, state]);
+  const handleShowSummary = useCallback(() => {
+    setShowSummaryModal(true);
+  }, []);
 
   // 新しいブレインストーミングを開始
   const handleStartNewBrainstorm = useCallback(() => {
@@ -519,17 +510,17 @@ export function BrainstormChatContainer({
                 {headerExtra}
               </div>
 
-              {/* Export Button */}
+              {/* Summary Button */}
               {messages.length > 0 && (
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={handleExportMarkdown}
+                  onClick={handleShowSummary}
                   className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3 p-0"
-                  title="Markdownでエクスポート"
+                  title="会話をまとめる"
                 >
-                  <span className="material-symbols-outlined text-base">download</span>
-                  <span className="hidden sm:inline ml-1">MD</span>
+                  <span className="material-symbols-outlined text-base">summarize</span>
+                  <span className="hidden sm:inline ml-1">まとめ</span>
                 </Button>
               )}
 
@@ -736,7 +727,7 @@ export function BrainstormChatContainer({
               <BrainstormCompletionUI
                 brainstormState={state}
                 onSaveAsProject={() => setShowSaveModal(true)}
-                onExportMarkdown={handleExportMarkdown}
+                onShowSummary={handleShowSummary}
                 onStartNew={handleStartNewBrainstorm}
               />
             )}
@@ -762,6 +753,14 @@ export function BrainstormChatContainer({
         onOpenChange={setShowSaveModal}
         brainstormState={state}
         conversationId={conversationId}
+      />
+
+      {/* Summary Modal */}
+      <BrainstormSummaryModal
+        open={showSummaryModal}
+        onOpenChange={setShowSummaryModal}
+        messages={messages}
+        brainstormState={state}
       />
     </div>
   );
@@ -1125,12 +1124,12 @@ function TransitionSuggestionUI({
 function BrainstormCompletionUI({
   brainstormState,
   onSaveAsProject,
-  onExportMarkdown,
+  onShowSummary,
   onStartNew,
 }: {
   brainstormState: BrainstormModeState;
   onSaveAsProject: () => void;
-  onExportMarkdown: () => void;
+  onShowSummary: () => void;
   onStartNew: () => void;
 }) {
   const completedAt = brainstormState.completedAt
@@ -1199,11 +1198,11 @@ function BrainstormCompletionUI({
             </button>
 
             <button
-              onClick={onExportMarkdown}
+              onClick={onShowSummary}
               className="w-full py-3 px-4 rounded-lg border-2 border-border hover:bg-muted/50 font-medium text-sm transition-colors flex items-center justify-center gap-2"
             >
-              <span className="material-symbols-outlined text-lg">download</span>
-              Markdownでエクスポート
+              <span className="material-symbols-outlined text-lg">summarize</span>
+              まとめを見る
             </button>
 
             <button

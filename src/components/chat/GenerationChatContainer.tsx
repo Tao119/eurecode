@@ -428,8 +428,8 @@ export function GenerationChatContainer({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Mode Header */}
-      <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+      {/* Mode Header - z-30 to ensure dropdowns appear above main content */}
+      <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80 relative z-30">
         <div className="mx-auto max-w-6xl px-2 sm:px-4 py-2 sm:py-3">
           {/* Single row layout */}
           <div className="flex items-center justify-between gap-2">
