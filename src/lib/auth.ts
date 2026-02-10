@@ -1,11 +1,16 @@
 import NextAuth from "next-auth";
-import type { NextAuthConfig, Session } from "next-auth";
+import type { NextAuthConfig, Session, Account, Profile } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { cookies } from "next/headers";
 import type { UserType } from "@/generated/prisma/client";
 import type { SubscriptionPlan } from "@/types/user";
+
+// Cookie name for access key (used in Google OAuth flow for members)
+const ACCESS_KEY_COOKIE = "pending_access_key";
 
 // Token limits by plan (using monthly conversation points as proxy)
 const TOKEN_LIMITS: Record<SubscriptionPlan, number> = {
@@ -83,6 +88,16 @@ export const authConfig: NextAuthConfig = {
     error: "/login",
   },
   providers: [
+    // Google OAuth Provider
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "select_account",
+        },
+      },
+    }),
     // Login Token authentication (for auto-login after payment)
     Credentials({
       id: "login-token",
@@ -362,6 +377,209 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }: { user: any; account?: Account | null; profile?: Profile }) {
+      // Only handle Google OAuth
+      if (account?.provider !== "google") {
+        return true;
+      }
+
+      const email = profile?.email;
+      if (!email) {
+        return false;
+      }
+
+      try {
+        // Check for pending access key in cookie (for member registration)
+        const cookieStore = await cookies();
+        const pendingAccessKey = cookieStore.get(ACCESS_KEY_COOKIE)?.value;
+
+        if (pendingAccessKey) {
+          // Access key flow: Create member user
+          const accessKey = await prisma.accessKey.findUnique({
+            where: { keyCode: pendingAccessKey },
+            include: { organization: true, user: true },
+          });
+
+          if (!accessKey || accessKey.status !== "active") {
+            // Invalid or already used key
+            cookieStore.delete(ACCESS_KEY_COOKIE);
+            return "/join?error=INVALID_KEY";
+          }
+
+          if (accessKey.expiresAt && accessKey.expiresAt < new Date()) {
+            await prisma.accessKey.update({
+              where: { id: accessKey.id },
+              data: { status: "expired" },
+            });
+            cookieStore.delete(ACCESS_KEY_COOKIE);
+            return "/join?error=KEY_EXPIRED";
+          }
+
+          // Check if email is already used
+          const existingUser = await prisma.user.findUnique({ where: { email } });
+          if (existingUser) {
+            cookieStore.delete(ACCESS_KEY_COOKIE);
+            return "/join?error=EMAIL_ALREADY_EXISTS";
+          }
+
+          // Create member user with Google account
+          const newMember = await prisma.user.create({
+            data: {
+              email,
+              displayName: profile?.name || email.split("@")[0],
+              userType: "member",
+              organizationId: accessKey.organizationId,
+              emailVerified: new Date(),
+              accounts: {
+                create: {
+                  type: "oauth",
+                  provider: "google",
+                  providerAccountId: account.providerAccountId,
+                  access_token: account.access_token,
+                  refresh_token: account.refresh_token,
+                  expires_at: account.expires_at,
+                  token_type: account.token_type,
+                  scope: account.scope,
+                  id_token: account.id_token,
+                },
+              },
+            },
+          });
+
+          // Update access key
+          await prisma.accessKey.update({
+            where: { id: accessKey.id },
+            data: {
+              userId: newMember.id,
+              usedAt: new Date(),
+              status: "used",
+            },
+          });
+
+          // Create CreditAllocation
+          if (accessKey.dailyTokenLimit && accessKey.organizationId) {
+            const now = new Date();
+            const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+            await prisma.creditAllocation.upsert({
+              where: {
+                organizationId_userId_periodStart: {
+                  organizationId: accessKey.organizationId,
+                  userId: newMember.id,
+                  periodStart,
+                },
+              },
+              update: { allocatedPoints: accessKey.dailyTokenLimit },
+              create: {
+                organizationId: accessKey.organizationId,
+                userId: newMember.id,
+                allocatedPoints: accessKey.dailyTokenLimit,
+                usedPoints: 0,
+                periodStart,
+                periodEnd,
+                note: `アクセスキー ${pendingAccessKey} による自動割り当て（Google認証）`,
+              },
+            });
+          }
+
+          // Clear the cookie
+          cookieStore.delete(ACCESS_KEY_COOKIE);
+
+          // Set user info for JWT
+          user.id = newMember.id;
+          user.email = newMember.email;
+          user.displayName = newMember.displayName;
+          user.userType = newMember.userType;
+          user.organizationId = newMember.organizationId;
+
+          return true;
+        }
+
+        // Normal flow: Individual user login/registration
+        const existingUser = await prisma.user.findUnique({
+          where: { email },
+          include: { accounts: true },
+        });
+
+        if (existingUser) {
+          // Existing user: Link Google account if not already linked
+          const hasGoogleAccount = existingUser.accounts.some(
+            (acc) => acc.provider === "google"
+          );
+
+          if (!hasGoogleAccount) {
+            await prisma.account.create({
+              data: {
+                userId: existingUser.id,
+                type: "oauth",
+                provider: "google",
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            });
+          }
+
+          user.id = existingUser.id;
+          user.email = existingUser.email;
+          user.displayName = existingUser.displayName;
+          user.userType = existingUser.userType;
+          user.organizationId = existingUser.organizationId;
+
+          return true;
+        }
+
+        // New user: Create individual user with free plan + 14 days trial
+        const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            displayName: profile?.name || email.split("@")[0],
+            userType: "individual",
+            emailVerified: new Date(),
+            accounts: {
+              create: {
+                type: "oauth",
+                provider: "google",
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            },
+            subscription: {
+              create: {
+                individualPlan: "free",
+                status: "active",
+                trialEnd: trialEndDate,
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: trialEndDate,
+              },
+            },
+          },
+        });
+
+        user.id = newUser.id;
+        user.email = newUser.email;
+        user.displayName = newUser.displayName;
+        user.userType = newUser.userType;
+        user.organizationId = newUser.organizationId;
+
+        return true;
+      } catch (error) {
+        console.error("Google OAuth signIn error:", error);
+        return false;
+      }
+    },
     async jwt({ token, user, trigger }) {
       const extendedToken = token as ExtendedJWT & typeof token;
 
