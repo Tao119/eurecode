@@ -1,4 +1,18 @@
 import { prisma } from "./prisma";
+import type { SubscriptionPlan } from "@/types/user";
+
+// Token limits by subscription plan (daily tokens)
+// These are generous limits for learning/save operations
+const PLAN_TOKEN_LIMITS: Record<SubscriptionPlan, number> = {
+  // Individual plans
+  free: 50000,      // 約12,500文字/日
+  starter: 200000,  // 約50,000文字/日
+  pro: 500000,      // 約125,000文字/日
+  max: 1000000,     // 約250,000文字/日
+  // Organization plans
+  business: 500000,
+  enterprise: 999999999,
+};
 
 export interface TokenLimitCheck {
   allowed: boolean;
@@ -17,19 +31,46 @@ export async function checkTokenLimit(
   userId: string,
   requiredTokens: number = 0
 ): Promise<TokenLimitCheck> {
-  // Get user's daily token limit from associated AccessKey
+  // Get user with subscription and accessKey info
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      userType: true,
       accessKey: {
         select: { dailyTokenLimit: true },
+      },
+      subscription: {
+        select: { individualPlan: true },
+      },
+      organization: {
+        select: {
+          subscription: {
+            select: { organizationPlan: true },
+          },
+        },
       },
     },
   });
 
-  // Default limit: use AccessKey's dailyTokenLimit, or fall back to env var or default
-  const defaultLimit = Number(process.env.DEFAULT_DAILY_TOKEN_LIMIT) || 10000;
-  const dailyLimit = user?.accessKey?.dailyTokenLimit || defaultLimit;
+  // Determine daily limit based on user type
+  let dailyLimit: number;
+
+  if (user?.userType === "member" && user.accessKey?.dailyTokenLimit) {
+    // Organization member: use accessKey limit (converted to daily token limit)
+    // accessKey.dailyTokenLimit is conversation points, multiply for token estimate
+    dailyLimit = user.accessKey.dailyTokenLimit * 1000;
+  } else if (user?.userType === "individual" && user.subscription?.individualPlan) {
+    // Individual user: use subscription plan limit
+    const plan = user.subscription.individualPlan as SubscriptionPlan;
+    dailyLimit = PLAN_TOKEN_LIMITS[plan] || PLAN_TOKEN_LIMITS.free;
+  } else if (user?.userType === "admin" && user.organization?.subscription?.organizationPlan) {
+    // Organization admin: use organization plan limit
+    const plan = user.organization.subscription.organizationPlan as SubscriptionPlan;
+    dailyLimit = PLAN_TOKEN_LIMITS[plan] || PLAN_TOKEN_LIMITS.business;
+  } else {
+    // Fallback to default
+    dailyLimit = Number(process.env.DEFAULT_DAILY_TOKEN_LIMIT) || 50000;
+  }
 
   // Get today's usage
   const today = new Date();
