@@ -208,6 +208,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [saveLearningOpen, setSaveLearningOpen] = useState(false);
   const [selectedContent, setSelectedContent] = useState("");
 
+  // Copy message state
+  const [copied, setCopied] = useState(false);
+
   // Text selection state for partial content saving
   const [selectionPopup, setSelectionPopup] = useState<{ x: number; y: number; text: string } | null>(null);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -227,6 +230,25 @@ export const ChatMessage = memo(function ChatMessage({
       window.getSelection()?.removeAllRanges();
     }
   }, [selectionPopup]);
+
+  // Handle copy entire message
+  const handleCopyMessage = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = message.content;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [message.content]);
 
   // Handle text selection within the message
   useEffect(() => {
@@ -420,6 +442,23 @@ export const ChatMessage = memo(function ChatMessage({
       {/* Action Buttons - Mobile: icon only, Desktop: with labels */}
       {isAssistant && !isStreaming && (
         <div className="absolute right-2 sm:right-4 top-2 sm:top-4 flex items-center gap-1 sm:gap-2">
+          {/* Copy message button */}
+          <button
+            onClick={handleCopyMessage}
+            className={cn(
+              "flex items-center gap-1.5 p-2.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium bg-card/80 border border-border/50 active:scale-95 transition-all shadow-sm cursor-pointer",
+              copied
+                ? "text-green-500 border-green-500/50"
+                : "text-muted-foreground hover:bg-muted/80 hover:border-primary/50 hover:text-foreground"
+            )}
+            title={copied ? "コピーしました" : "コピー"}
+            aria-label={copied ? "コピーしました" : "コピー"}
+          >
+            <span className="material-symbols-outlined text-lg sm:text-base" aria-hidden="true">
+              {copied ? "check" : "content_copy"}
+            </span>
+            <span className="hidden sm:inline">{copied ? "コピー済" : "コピー"}</span>
+          </button>
           {/* Save as Learning button */}
           <button
             onClick={handleSaveLearning}
