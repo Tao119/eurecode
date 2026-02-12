@@ -521,11 +521,11 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       // 次の未回答クイズを取得
       const nextPendingQuiz = response.items.find((q) => q.status === "pending");
 
-      // 回答済みクイズを履歴に変換
+      // 回答済みクイズを履歴に変換（APIのlevelは1ベース、内部は0ベース）
       const quizHistory: QuizHistoryItem[] = response.items
         .filter((q) => q.status === "answered")
         .map((q) => ({
-          level: q.level,
+          level: q.level - 1, // APIのlevelは1ベース、内部では0ベースを使用
           question: q.question,
           userAnswer: q.userAnswer || "",
           isCorrect: q.isCorrect || false,
@@ -612,7 +612,8 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
       const response = await apiAnswerQuiz(artifactId, quizId, answer);
 
       const newHistoryItem: QuizHistoryItem = {
-        level: response.quiz.level,
+        // APIのlevelは1ベース、内部では0ベースを使用
+        level: response.quiz.level - 1,
         question: response.quiz.question,
         userAnswer: answer,
         isCorrect: response.isCorrect,
