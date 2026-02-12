@@ -18,28 +18,18 @@ import {
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import {
   useGenerationMode,
-  type UnlockLevel,
-  type UnlockQuiz,
   type UseGenerationModeOptions,
   type PersistedGenerationState,
 } from "@/hooks/useGenerationMode";
 import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
-import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
+import { MODE_CONFIG } from "@/config/modes";
 import type { Message, ConversationBranch, Artifact, FileAttachment } from "@/types/chat";
 import type { ActiveArtifactContext } from "@/hooks/useChat";
 import { cn } from "@/lib/utils";
 import { parseArtifacts } from "@/lib/artifacts";
 import {
-  parseStructuredQuiz,
-  extractQuizFromText,
-  generateFallbackQuiz,
-  structuredQuizToUnlockQuiz,
   removeQuizMarkerFromContent,
   removeIncompleteStreamingTags,
-  hasFallbackBeenUsed,
-  markFallbackAsUsed,
-  hasAutoQuizRequestBeenSent,
-  markAutoQuizRequestSent,
 } from "@/lib/quiz-generator";
 
 interface GenerationChatContainerProps {
@@ -64,21 +54,6 @@ interface GenerationChatContainerProps {
   conversationId?: string; // クイズ進行状況を保存するためのID
   // 初期状態（会話metadataから読み込み）
   initialGenerationState?: PersistedGenerationState;
-}
-
-/**
- * Extract quiz from AI response content
- * Priority: 1. Structured quiz format 2. Text-based extraction
- */
-function extractQuizFromResponse(content: string, level: UnlockLevel): UnlockQuiz | null {
-  // Try structured quiz format first
-  const structuredQuiz = parseStructuredQuiz(content);
-  if (structuredQuiz) {
-    return structuredQuizToUnlockQuiz(structuredQuiz);
-  }
-
-  // Fallback to text-based extraction
-  return extractQuizFromText(content, level);
 }
 
 export function GenerationChatContainer({
@@ -155,18 +130,14 @@ export function GenerationChatContainer({
   const {
     state,
     options,
-    canCopyCode,
     progressPercentage,
     activeArtifact,
     setPhase,
-    setGeneratedCode,
-    setCurrentQuiz,
-    answerQuiz,
     skipToUnlock,
     updateOptions,
     addOrUpdateArtifact,
     setActiveArtifact,
-    // New Quiz API functions
+    // Quiz API functions
     loadQuizzesFromAPI,
     generateQuizzesForArtifact,
     answerQuizAPI,
@@ -276,15 +247,9 @@ export function GenerationChatContainer({
       if (state.phase === "initial" || state.phase === "planning") {
         setPhase("coding");
       }
-      // クイズは完全アンロック前のみ抽出
-      if (!isFullyUnlocked) {
-        const quiz = extractQuizFromResponse(lastAssistantContent, state.unlockLevel);
-        if (quiz) {
-          setCurrentQuiz(quiz);
-        }
-      }
+      // Note: クイズはAPIから読み込むため、ここではフェーズ変更のみ
     }
-  }, [messages, addOrUpdateArtifact, setPhase, setCurrentQuiz, state.unlockLevel, state.totalQuestions, state.phase]);
+  }, [messages, addOrUpdateArtifact, setPhase, state.phase]);
 
   // ストリーミング中のアーティファクト検出（即座にパネルを開く）
   const streamingArtifactRef = useRef<Set<string>>(new Set());
@@ -383,26 +348,8 @@ export function GenerationChatContainer({
       }
     }
 
-    // 旧クイズ抽出システム（フォールバック用に残す）
-    // ただし、新システムでクイズが生成された場合はスキップ
-    // totalQuestions=0 (制限解除モード) の場合もスキップ
-    if (!isLoading && !state.currentQuiz) {
-      const isFullyUnlocked = state.totalQuestions === 0 || state.unlockLevel >= state.totalQuestions;
-      if (!isFullyUnlocked && (artifacts.length > 0 || state.phase === "coding" || state.phase === "unlocking")) {
-        // 新システムでクイズが生成されるまで待機するため、旧システムは遅延実行
-        // 新システムが失敗した場合のみ旧システムを使用
-        setTimeout(() => {
-          // 新システムでクイズが生成されていない場合のみ旧システムを使用
-          if (!state.currentQuiz) {
-            const quiz = extractQuizFromResponse(content, state.unlockLevel);
-            if (quiz) {
-              setCurrentQuiz(quiz);
-            }
-          }
-        }, 2000); // 2秒待ってから旧システムを試行
-      }
-    }
-  }, [messages, isLoading, state.phase, state.unlockLevel, state.totalQuestions, state.currentQuiz, setPhase, setCurrentQuiz, addOrUpdateArtifact, generateQuizzesForArtifact]);
+    // Note: 旧クイズ抽出システムは削除済み。クイズはAPIから生成・取得される。
+  }, [messages, isLoading, state.phase, setPhase, addOrUpdateArtifact, generateQuizzesForArtifact]);
 
   // 新クイズシステム: アーティファクト選択時にクイズを読み込む
   useEffect(() => {
@@ -428,82 +375,22 @@ export function GenerationChatContainer({
     });
   }, [state.activeArtifactId, state.currentQuiz, loadQuizzesFromAPI]);
 
-  // クイズが必要な場合に自動生成（フォールバック）
-  // 注意: フォールバックは1アーティファクトにつき1回のみ自動実行
-  useEffect(() => {
-    // unlocking フェーズで currentQuiz がなく、まだ完全アンロックではない場合
-    const needsQuiz = state.totalQuestions > 0 && state.unlockLevel < state.totalQuestions;
-    const artifactId = state.activeArtifactId;
-
-    if (
-      state.phase === "unlocking" &&
-      !state.currentQuiz &&
-      needsQuiz &&
-      artifactsList.length > 0 &&
-      artifactId &&
-      !hasFallbackBeenUsed(artifactId)
-    ) {
-      // フォールバック使用をマークしてからクイズを生成
-      markFallbackAsUsed(artifactId);
-      const fallbackQuiz = generateFallbackQuiz(state.unlockLevel, activeArtifact);
-      setCurrentQuiz(fallbackQuiz);
-    }
-  }, [state.phase, state.currentQuiz, state.unlockLevel, state.activeArtifactId, activeArtifact, artifactsList.length, setCurrentQuiz, state.totalQuestions]);
-
-  // クイズが抽出できなかった場合にAIに自動リクエスト
-  // 注意: フォールバック使用後、AIレスポンスにクイズがなかった場合のみ1回だけ自動実行
-  useEffect(() => {
-    // ストリーミング中は処理しない（完了を待つ）
-    if (isLoading) return;
-
-    // 初期化前はスキップ
-    if (!initializedRef.current) return;
-
-    // クイズがある場合はスキップ
-    if (state.currentQuiz) return;
-
-    // アクティブなアーティファクトがない場合はスキップ
-    const artifactId = state.activeArtifactId;
-    if (!artifactId || !activeArtifact) return;
-
-    // 完全アンロック済みの場合はスキップ
-    const needsQuiz = state.totalQuestions > 0 && state.unlockLevel < state.totalQuestions;
-    if (!needsQuiz) return;
-
-    // unlocking/coding フェーズでない場合はスキップ
-    if (state.phase !== "unlocking" && state.phase !== "coding") return;
-
-    // フォールバックがまだ使用されていない場合はスキップ（まずフォールバックを試す）
-    if (!hasFallbackBeenUsed(artifactId)) return;
-
-    // 自動リクエスト済みの場合はスキップ
-    if (hasAutoQuizRequestBeenSent(artifactId)) return;
-
-    // 自動リクエスト送信済みをマーク
-    markAutoQuizRequestSent(artifactId);
-
-    // AIにクイズ生成をリクエスト
-    sendMessageWithArtifact(
-      "生成されたコードについて、理解度確認のクイズを出題してください。「なぜ〜していますか？」形式の質問でお願いします。"
-    );
-  }, [isLoading, state.currentQuiz, state.activeArtifactId, activeArtifact, state.totalQuestions, state.unlockLevel, state.phase, sendMessageWithArtifact]);
+  // Note: 旧フォールバッククイズ生成と自動リクエストは削除済み。
+  // クイズはAPIから生成・取得される（generateQuizzesForArtifact, loadQuizzesFromAPI）。
 
   // クイズに回答（新APIベース）
-  // state.currentQuizにidがある場合はAPIを使用、なければ旧方式
   const handleQuizAnswer = useCallback(
     async (answer: string) => {
       const quizId = (state.currentQuiz as { id?: string })?.id;
       const artifactId = state.activeArtifactId;
 
       if (quizId && artifactId) {
-        // 新クイズシステム: APIを使用
         await answerQuizAPI(artifactId, quizId, answer, messages.length);
       } else {
-        // 旧システム: ローカル処理（フォールバック）
-        answerQuiz(answer, messages.length);
+        console.warn("[GenerationChatContainer] Cannot answer quiz: missing quizId or artifactId");
       }
     },
-    [state.currentQuiz, state.activeArtifactId, answerQuizAPI, answerQuiz, messages.length]
+    [state.currentQuiz, state.activeArtifactId, answerQuizAPI, messages.length]
   );
 
   // スキップ
@@ -761,7 +648,7 @@ export function GenerationChatContainer({
                     />
                   </div>
                 ) : (
-                  /* クイズが表示されない場合の再生成ボタン */
+                  /* クイズがない場合: 読み込み中または再生成ボタン（新APIシステム） */
                   activeArtifact && !activeArtifactProgress.isUnlocked && !isLoading && (
                     <div className="px-4 py-4">
                       <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
@@ -771,47 +658,27 @@ export function GenerationChatContainer({
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-foreground/90">
-                              {hasAutoQuizRequestBeenSent(activeArtifact.id)
-                                ? "クイズが生成されませんでした"
-                                : "クイズが表示されていません"}
+                              クイズを読み込んでいます...
                             </p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {hasAutoQuizRequestBeenSent(activeArtifact.id)
-                                ? "もう一度リクエストするか、コードを確認してください"
-                                : hasFallbackBeenUsed(activeArtifact.id)
-                                  ? "AIにクイズを自動リクエスト中..."
-                                  : "クイズに回答してコードをアンロックしましょう"}
+                              クイズに回答してコードをアンロックしましょう
                             </p>
                           </div>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              if (hasFallbackBeenUsed(activeArtifact.id)) {
-                                // フォールバック使用済み: AIにクイズ再生成をリクエスト
-                                sendMessageWithArtifact(
-                                  "生成されたコードについて、理解度確認のクイズを出題してください。「なぜ〜していますか？」形式の質問でお願いします。"
-                                );
-                              } else {
-                                // フォールバック未使用: 自己評価型クイズを表示
-                                markFallbackAsUsed(activeArtifact.id);
-                                const fallbackQuiz = generateFallbackQuiz(
-                                  activeArtifactProgress.unlockLevel as UnlockLevel,
-                                  activeArtifact
-                                );
-                                setCurrentQuiz(fallbackQuiz);
+                              // APIからクイズを再生成
+                              if (activeArtifact.id) {
+                                generateQuizzesForArtifact(activeArtifact.id).catch((error) => {
+                                  console.error("[GenerationChatContainer] Quiz regeneration failed:", error);
+                                });
                               }
                             }}
                             className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
                           >
-                            <span className="material-symbols-outlined text-base mr-1.5">
-                              {hasFallbackBeenUsed(activeArtifact.id) ? "refresh" : "quiz"}
-                            </span>
-                            {hasAutoQuizRequestBeenSent(activeArtifact.id)
-                              ? "再リクエスト"
-                              : hasFallbackBeenUsed(activeArtifact.id)
-                                ? "AIに質問を依頼"
-                                : "クイズを表示"}
+                            <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
+                            クイズを再生成
                           </Button>
                         </div>
                       </div>
