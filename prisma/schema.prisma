@@ -123,6 +123,13 @@ enum ArtifactType {
   config
 }
 
+// クイズの回答状態
+enum QuizStatus {
+  pending   // 未回答
+  answered  // 回答済み
+  skipped   // スキップ
+}
+
 // ============================================
 // Models
 // ============================================
@@ -417,11 +424,12 @@ model Artifact {
   language       String?
   version        Int          @default(1)
 
-  // アンロック進捗（埋め込み）
+  // アンロック進捗
   unlockLevel    Int          @default(0) @map("unlock_level")
   totalQuestions Int          @default(0) @map("total_questions")
-  quizHistory    Json?        @map("quiz_history") // QuizHistoryItem[]
-  currentQuiz    Json?        @map("current_quiz") // UnlockQuiz or null
+  // 後方互換のため残す（非推奨: 新規はQuizテーブルを使用）
+  quizHistory    Json?        @map("quiz_history") // @deprecated - use Quiz table
+  currentQuiz    Json?        @map("current_quiz") // @deprecated - use Quiz table
 
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -429,10 +437,42 @@ model Artifact {
   // Relations
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizzes        Quiz[]       // 新クイズシステム
 
   @@index([conversationId])
   @@index([userId, createdAt])
   @@map("artifacts")
+}
+
+// クイズ（アーティファクトに紐づく）
+model Quiz {
+  id           String     @id @default(uuid())
+  artifactId   String     @map("artifact_id")
+
+  // クイズ内容
+  level        Int        // 問題番号（1から始まる）
+  question     String     @db.Text
+  options      Json       // QuizOption[] - { label: string, text: string, explanation?: string }[]
+  correctLabel String     @map("correct_label")
+  hint         String?    @db.Text
+  codeSnippet  String?    @map("code_snippet") @db.Text
+  codeLanguage String?    @map("code_language")
+
+  // 回答状態
+  status       QuizStatus @default(pending)
+  userAnswer   String?    @map("user_answer")
+  isCorrect    Boolean?   @map("is_correct")
+  answeredAt   DateTime?  @map("answered_at")
+
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  artifact     Artifact   @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, level])
+  @@index([artifactId, status])
+  @@map("quizzes")
 }
 
 // ============================================

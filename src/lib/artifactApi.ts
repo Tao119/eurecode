@@ -233,3 +233,156 @@ export function apiResponseToProgress(response: ArtifactApiResponse): {
     quizHistory: response.quizHistory,
   };
 }
+
+// ============================================
+// Quiz API (新クイズシステム)
+// ============================================
+
+export interface QuizApiResponse {
+  id: string;
+  artifactId: string;
+  level: number;
+  question: string;
+  options: { label: string; text: string; explanation?: string }[];
+  correctLabel: string;
+  hint: string | null;
+  codeSnippet: string | null;
+  codeLanguage: string | null;
+  status: "pending" | "answered" | "skipped";
+  userAnswer: string | null;
+  isCorrect: boolean | null;
+  answeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FetchQuizzesResponse {
+  items: QuizApiResponse[];
+  total: number;
+  currentLevel: number;
+  isUnlocked: boolean;
+  nextQuizId: string | null;
+}
+
+export interface GenerateQuizzesResponse extends FetchQuizzesResponse {
+  generated: boolean;
+  message?: string;
+}
+
+export interface AnswerQuizResponse {
+  quiz: QuizApiResponse;
+  isCorrect: boolean;
+  currentLevel: number;
+  totalQuestions: number;
+  isUnlocked: boolean;
+  nextQuiz: QuizApiResponse | null;
+}
+
+/**
+ * Fetch all quizzes for an artifact
+ */
+export async function fetchQuizzes(artifactId: string): Promise<FetchQuizzesResponse> {
+  const response = await fetch(`/api/artifacts/${artifactId}/quizzes`);
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new ArtifactApiError(
+      data.error?.code || "UNKNOWN_ERROR",
+      data.error?.message || "クイズの取得に失敗しました"
+    );
+  }
+
+  return data.data;
+}
+
+/**
+ * Generate quizzes for an artifact
+ * If quizzes already exist, returns existing quizzes
+ */
+export async function generateQuizzes(artifactId: string): Promise<GenerateQuizzesResponse> {
+  const response = await fetch(`/api/artifacts/${artifactId}/quizzes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new ArtifactApiError(
+      data.error?.code || "UNKNOWN_ERROR",
+      data.error?.message || "クイズの生成に失敗しました"
+    );
+  }
+
+  return data.data;
+}
+
+/**
+ * Answer a quiz
+ */
+export async function answerQuiz(
+  artifactId: string,
+  quizId: string,
+  answer: string
+): Promise<AnswerQuizResponse> {
+  const response = await fetch(`/api/artifacts/${artifactId}/quizzes/${quizId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answer }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new ArtifactApiError(
+      data.error?.code || "UNKNOWN_ERROR",
+      data.error?.message || "回答の送信に失敗しました",
+      data.error?.details
+    );
+  }
+
+  return data.data;
+}
+
+/**
+ * Delete all quizzes for an artifact (for regeneration)
+ */
+export async function deleteQuizzes(artifactId: string): Promise<void> {
+  const response = await fetch(`/api/artifacts/${artifactId}/quizzes`, {
+    method: "DELETE",
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new ArtifactApiError(
+      data.error?.code || "UNKNOWN_ERROR",
+      data.error?.message || "クイズの削除に失敗しました"
+    );
+  }
+}
+
+/**
+ * Convert QuizApiResponse to UnlockQuiz format (for backward compatibility)
+ */
+export function quizApiToUnlockQuiz(quiz: QuizApiResponse): UnlockQuiz & {
+  id: string;
+  totalQuestions?: number;
+  codeSnippet?: string;
+  codeLanguage?: string;
+} {
+  return {
+    id: quiz.id,
+    level: quiz.level,
+    question: quiz.question,
+    options: quiz.options.map((opt) => ({
+      label: opt.label,
+      text: opt.text,
+      explanation: opt.explanation,
+    })),
+    correctLabel: quiz.correctLabel,
+    hint: quiz.hint || undefined,
+    codeSnippet: quiz.codeSnippet || undefined,
+    codeLanguage: quiz.codeLanguage || undefined,
+  };
+}

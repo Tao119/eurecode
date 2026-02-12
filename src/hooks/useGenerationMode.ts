@@ -8,6 +8,12 @@ import {
   fetchArtifacts as apiFetchArtifacts,
   apiResponseToArtifact,
   apiResponseToProgress,
+  // New Quiz API
+  fetchQuizzes as apiFetchQuizzes,
+  generateQuizzes as apiGenerateQuizzes,
+  answerQuiz as apiAnswerQuiz,
+  quizApiToUnlockQuiz,
+  type QuizApiResponse,
 } from "@/lib/artifactApi";
 import { estimateQuizCount } from "@/lib/quiz-generator";
 
@@ -502,6 +508,150 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     });
   }, [defaultTotalQuestions]);
 
+  // クイズをAPIから読み込む（新クイズシステム）
+  const loadQuizzesFromAPI = useCallback(async (artifactId: string): Promise<void> => {
+    try {
+      const response = await apiFetchQuizzes(artifactId);
+
+      // 次の未回答クイズを取得
+      const nextPendingQuiz = response.items.find((q) => q.status === "pending");
+
+      // 回答済みクイズを履歴に変換
+      const quizHistory: QuizHistoryItem[] = response.items
+        .filter((q) => q.status === "answered")
+        .map((q) => ({
+          level: q.level,
+          question: q.question,
+          userAnswer: q.userAnswer || "",
+          isCorrect: q.isCorrect || false,
+          completedQuiz: q.isCorrect ? quizApiToUnlockQuiz(q) : undefined,
+        }));
+
+      setState((prev) => {
+        const artifact = prev.artifacts[artifactId];
+        if (!artifact) return prev;
+
+        const newProgress: ArtifactProgress = {
+          unlockLevel: response.currentLevel - 1, // currentLevelは1ベース、unlockLevelは0ベース
+          totalQuestions: response.total,
+          currentQuiz: nextPendingQuiz ? quizApiToUnlockQuiz(nextPendingQuiz) : null,
+          quizHistory,
+        };
+
+        return {
+          ...prev,
+          unlockLevel: newProgress.unlockLevel,
+          totalQuestions: response.total,
+          currentQuiz: nextPendingQuiz ? quizApiToUnlockQuiz(nextPendingQuiz) : null,
+          quizHistory,
+          phase: response.isUnlocked ? "unlocked" : (nextPendingQuiz ? "unlocking" : "coding"),
+          artifactProgress: {
+            ...prev.artifactProgress,
+            [artifactId]: newProgress,
+          },
+        };
+      });
+    } catch (error) {
+      console.error("[loadQuizzesFromAPI] Failed to load quizzes:", error);
+    }
+  }, []);
+
+  // クイズを生成する（新クイズシステム）
+  const generateQuizzesForArtifact = useCallback(async (artifactId: string): Promise<void> => {
+    try {
+      const response = await apiGenerateQuizzes(artifactId);
+
+      // 最初のクイズを取得
+      const firstQuiz = response.items.find((q) => q.status === "pending");
+
+      setState((prev) => {
+        const artifact = prev.artifacts[artifactId];
+        if (!artifact) return prev;
+
+        const newProgress: ArtifactProgress = {
+          unlockLevel: 0,
+          totalQuestions: response.total,
+          currentQuiz: firstQuiz ? quizApiToUnlockQuiz(firstQuiz) : null,
+          quizHistory: [],
+        };
+
+        // 生成されたクイズがない場合は即アンロック
+        const isUnlocked = response.total === 0 || response.isUnlocked;
+
+        return {
+          ...prev,
+          unlockLevel: 0,
+          totalQuestions: response.total,
+          currentQuiz: firstQuiz ? quizApiToUnlockQuiz(firstQuiz) : null,
+          quizHistory: [],
+          phase: isUnlocked ? "unlocked" : "unlocking",
+          artifactProgress: {
+            ...prev.artifactProgress,
+            [artifactId]: newProgress,
+          },
+        };
+      });
+    } catch (error) {
+      console.error("[generateQuizzesForArtifact] Failed to generate quizzes:", error);
+    }
+  }, []);
+
+  // クイズに回答する（新APIベース）
+  const answerQuizAPI = useCallback(async (
+    artifactId: string,
+    quizId: string,
+    answer: string,
+    messageCount?: number
+  ): Promise<boolean> => {
+    try {
+      const response = await apiAnswerQuiz(artifactId, quizId, answer);
+
+      const newHistoryItem: QuizHistoryItem = {
+        level: response.quiz.level,
+        question: response.quiz.question,
+        userAnswer: answer,
+        isCorrect: response.isCorrect,
+        answeredAtMessageCount: messageCount,
+        completedQuiz: response.isCorrect ? quizApiToUnlockQuiz(response.quiz) : undefined,
+      };
+
+      setState((prev) => {
+        if (prev.hintTimer) {
+          clearTimeout(prev.hintTimer);
+        }
+
+        const newHistory = [...prev.quizHistory, newHistoryItem];
+
+        const newProgress: ArtifactProgress = {
+          unlockLevel: response.currentLevel - 1, // 0ベースに変換
+          totalQuestions: response.totalQuestions,
+          currentQuiz: response.nextQuiz ? quizApiToUnlockQuiz(response.nextQuiz) : null,
+          quizHistory: newHistory,
+        };
+
+        return {
+          ...prev,
+          quizHistory: newHistory,
+          unlockLevel: newProgress.unlockLevel,
+          totalQuestions: response.totalQuestions,
+          currentQuiz: response.nextQuiz ? quizApiToUnlockQuiz(response.nextQuiz) : null,
+          phase: response.isUnlocked ? "unlocked" : "unlocking",
+          hintVisible: !response.isCorrect, // 不正解時はヒントを表示
+          hintTimer: null,
+          artifactProgress: {
+            ...prev.artifactProgress,
+            [artifactId]: newProgress,
+          },
+        };
+      });
+
+      return response.isCorrect;
+    } catch (error) {
+      console.error("[answerQuizAPI] Failed to answer quiz:", error);
+      return false;
+    }
+  }, []);
+
   const updateOptions = useCallback((newOptions: Partial<GenerationOptions>) => {
     setCurrentOptions((prev) => ({ ...prev, ...newOptions }));
   }, []);
@@ -732,5 +882,9 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     updateOptions,
     addOrUpdateArtifact,
     setActiveArtifact,
+    // New Quiz API functions
+    loadQuizzesFromAPI,
+    generateQuizzesForArtifact,
+    answerQuizAPI,
   };
 }

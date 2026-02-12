@@ -166,6 +166,10 @@ export function GenerationChatContainer({
     updateOptions,
     addOrUpdateArtifact,
     setActiveArtifact,
+    // New Quiz API functions
+    loadQuizzesFromAPI,
+    generateQuizzesForArtifact,
+    answerQuizAPI,
   } = useGenerationMode(initialOptions);
 
   const prevMessagesLengthRef = useRef(0);
@@ -306,6 +310,8 @@ export function GenerationChatContainer({
 
   // メッセージが追加されたとき、またはストリーミング完了時の処理
   const lastProcessedContentRef = useRef<string>("");
+  // 新クイズシステム用: 生成済みアーティファクトを追跡
+  const quizGeneratedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!initializedRef.current) return;
@@ -334,6 +340,16 @@ export function GenerationChatContainer({
     if (artifacts.length > 0) {
       for (const artifact of artifacts) {
         addOrUpdateArtifact(artifact);
+
+        // 新クイズシステム: ストリーミング完了後にクイズを生成
+        // 1アーティファクトにつき1回のみ
+        if (!isLoading && !quizGeneratedRef.current.has(artifact.id)) {
+          quizGeneratedRef.current.add(artifact.id);
+          // クイズ生成をトリガー（非同期）
+          generateQuizzesForArtifact(artifact.id).catch((error) => {
+            console.error("[GenerationChatContainer] Quiz generation failed:", error);
+          });
+        }
       }
       // アーティファクトが見つかったらcodingフェーズに移行
       if (state.phase === "initial" || state.phase === "planning") {
@@ -341,18 +357,41 @@ export function GenerationChatContainer({
       }
     }
 
-    // クイズを抽出（ストリーミング完了後のみ、部分的なタグを避けるため）
-    // ただし、totalQuestions=0 (制限解除モード) の場合はスキップ
-    if (!isLoading) {
+    // 旧クイズ抽出システム（フォールバック用に残す）
+    // ただし、新システムでクイズが生成された場合はスキップ
+    // totalQuestions=0 (制限解除モード) の場合もスキップ
+    if (!isLoading && !state.currentQuiz) {
       const isFullyUnlocked = state.totalQuestions === 0 || state.unlockLevel >= state.totalQuestions;
       if (!isFullyUnlocked && (artifacts.length > 0 || state.phase === "coding" || state.phase === "unlocking")) {
-        const quiz = extractQuizFromResponse(content, state.unlockLevel);
-        if (quiz) {
-          setCurrentQuiz(quiz);
-        }
+        // 新システムでクイズが生成されるまで待機するため、旧システムは遅延実行
+        // 新システムが失敗した場合のみ旧システムを使用
+        setTimeout(() => {
+          // 新システムでクイズが生成されていない場合のみ旧システムを使用
+          if (!state.currentQuiz) {
+            const quiz = extractQuizFromResponse(content, state.unlockLevel);
+            if (quiz) {
+              setCurrentQuiz(quiz);
+            }
+          }
+        }, 2000); // 2秒待ってから旧システムを試行
       }
     }
-  }, [messages, isLoading, state.phase, state.unlockLevel, state.totalQuestions, setPhase, setCurrentQuiz, addOrUpdateArtifact]);
+  }, [messages, isLoading, state.phase, state.unlockLevel, state.totalQuestions, state.currentQuiz, setPhase, setCurrentQuiz, addOrUpdateArtifact, generateQuizzesForArtifact]);
+
+  // 新クイズシステム: アーティファクト選択時にクイズを読み込む
+  useEffect(() => {
+    const artifactId = state.activeArtifactId;
+    if (!artifactId) return;
+
+    // 既にクイズがある場合、または生成済みの場合はスキップ
+    if (state.currentQuiz) return;
+    if (quizGeneratedRef.current.has(artifactId)) return;
+
+    // 既存クイズを読み込み（非同期）
+    loadQuizzesFromAPI(artifactId).catch((error) => {
+      console.error("[GenerationChatContainer] Failed to load quizzes:", error);
+    });
+  }, [state.activeArtifactId, state.currentQuiz, loadQuizzesFromAPI]);
 
   // クイズが必要な場合に自動生成（フォールバック）
   // 注意: フォールバックは1アーティファクトにつき1回のみ自動実行
@@ -414,13 +453,22 @@ export function GenerationChatContainer({
     );
   }, [isLoading, state.currentQuiz, state.activeArtifactId, activeArtifact, state.totalQuestions, state.unlockLevel, state.phase, sendMessageWithArtifact]);
 
-  // クイズに回答（メッセージは送信せず、ローカルで処理）
-  // メッセージ数を渡してインライン表示位置を記録
+  // クイズに回答（新APIベース）
+  // state.currentQuizにidがある場合はAPIを使用、なければ旧方式
   const handleQuizAnswer = useCallback(
-    (answer: string) => {
-      answerQuiz(answer, messages.length);
+    async (answer: string) => {
+      const quizId = (state.currentQuiz as { id?: string })?.id;
+      const artifactId = state.activeArtifactId;
+
+      if (quizId && artifactId) {
+        // 新クイズシステム: APIを使用
+        await answerQuizAPI(artifactId, quizId, answer, messages.length);
+      } else {
+        // 旧システム: ローカル処理（フォールバック）
+        answerQuiz(answer, messages.length);
+      }
     },
-    [answerQuiz, messages.length]
+    [state.currentQuiz, state.activeArtifactId, answerQuizAPI, answerQuiz, messages.length]
   );
 
   // スキップ
