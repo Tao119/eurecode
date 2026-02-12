@@ -191,6 +191,9 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
   // skipAllowed をコールバック内で参照するためのref
   const skipAllowedRef = useRef(skipAllowed);
   skipAllowedRef.current = skipAllowed;
+  // conversationId をコールバック内で最新の値を参照するためのref
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
 
   // skipAllowed の場合: totalQuestions=0, unlockLevel=0 → 0 >= 0 で即アンロック
   // Default to 2 questions; actual count is determined dynamically when artifact is created
@@ -387,9 +390,10 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     };
 
     // API同期（非ブロッキング）- 正解時のみ進捗を更新
-    if (isCorrect && conversationId && activeId) {
+    const currentConversationId = conversationIdRef.current;
+    if (isCorrect && currentConversationId && activeId) {
       const nextLevel = state.unlockLevel + 1;
-      apiUpdateProgress(conversationId, activeId, {
+      apiUpdateProgress(currentConversationId, activeId, {
         unlockLevel: nextLevel,
         currentQuiz: null,
         quizHistoryItem: newHistoryItem,
@@ -448,7 +452,7 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     });
 
     return isCorrect;
-  }, [state.currentQuiz, state.activeArtifactId, state.artifactProgress, state.unlockLevel, conversationId]);
+  }, [state.currentQuiz, state.activeArtifactId, state.artifactProgress, state.unlockLevel]);
 
   // スキップ（手動アンロック）
   const skipToUnlock = useCallback(() => {
@@ -456,8 +460,9 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     const currentProgress = activeId ? state.artifactProgress[activeId] : null;
 
     // API同期（非ブロッキング）
-    if (conversationId && activeId && currentProgress) {
-      apiUpdateProgress(conversationId, activeId, {
+    const currentConversationId = conversationIdRef.current;
+    if (currentConversationId && activeId && currentProgress) {
+      apiUpdateProgress(currentConversationId, activeId, {
         unlockLevel: currentProgress.totalQuestions,
         currentQuiz: null,
       }).catch((e) => {
@@ -489,7 +494,7 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
         artifactProgress: updatedProgress,
       };
     });
-  }, [conversationId, state.activeArtifactId, state.artifactProgress]);
+  }, [state.activeArtifactId, state.artifactProgress]);
 
   const reset = useCallback(() => {
     setState({
@@ -664,10 +669,13 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     // Estimate quiz count based on code complexity (used for both API and local state)
     const estimatedQuizCount = skipAllowedRef.current ? 0 : estimateQuizCount(artifact.content);
 
+    // Use ref to get the latest conversationId (may change after initial render)
+    const currentConversationId = conversationIdRef.current;
+
     // API同期 - conversationIdがある場合のみ
     // Returns a Promise so callers can wait for the artifact to be saved
-    const apiPromise: Promise<string | null> = conversationId
-      ? apiUpsertArtifact(conversationId, {
+    const apiPromise: Promise<string | null> = currentConversationId
+      ? apiUpsertArtifact(currentConversationId, {
           id: artifact.id,
           type: artifact.type,
           title: artifact.title,
@@ -805,7 +813,7 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
 
     // Return the API promise so callers can wait for the artifact to be saved
     return apiPromise;
-  }, [conversationId]);
+  }, []); // conversationIdRef is used for latest value, no deps needed
 
   const setActiveArtifact = useCallback((id: string) => {
     setState((prev) => {
