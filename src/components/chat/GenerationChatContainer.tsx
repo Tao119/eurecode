@@ -641,16 +641,16 @@ export function GenerationChatContainer({
                   // Determine if this message is currently streaming
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
-                  // Check if this message contains artifact content (:::artifact markers)
+                  // Check if this message contains artifact content (<!--ARTIFACT: markers)
                   // This is the "artifact message" where currentQuiz should be displayed after
                   const containsArtifact = message.role === "assistant" &&
-                    (message.content.includes(":::artifact") || message.content.includes("```artifact"));
+                    message.content.includes("<!--ARTIFACT:");
 
                   // Find if this is the last message with artifact content
                   const isLastArtifactMessage = containsArtifact &&
                     !messages.slice(index + 1).some((m) =>
                       m.role === "assistant" &&
-                      (m.content.includes(":::artifact") || m.content.includes("```artifact"))
+                      m.content.includes("<!--ARTIFACT:")
                     );
 
                   // Process message content (remove quiz markers and artifact placeholders)
