@@ -935,6 +935,33 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     ? 100
     : (state.unlockLevel / state.totalQuestions) * 100;
 
+  // 対話モード用: 進捗を更新
+  const updateDialogueProgress = useCallback((
+    artifactId: string,
+    newUnlockLevel: number,
+    isFullyUnlocked: boolean
+  ) => {
+    setState((prev) => {
+      const currentProgress = prev.artifactProgress[artifactId];
+      if (!currentProgress) return prev;
+
+      const updatedProgress: ArtifactProgress = {
+        ...currentProgress,
+        unlockLevel: newUnlockLevel,
+      };
+
+      return {
+        ...prev,
+        unlockLevel: newUnlockLevel,
+        phase: isFullyUnlocked ? "unlocked" : prev.phase,
+        artifactProgress: {
+          ...prev.artifactProgress,
+          [artifactId]: updatedProgress,
+        },
+      };
+    });
+  }, []);
+
   return {
     state,
     options: currentOptions,
@@ -957,5 +984,7 @@ export function useGenerationMode(options: UseGenerationModeOptions = {}) {
     loadQuizzesFromAPI,
     generateQuizzesForArtifact,
     answerQuizAPI,
+    // Dialogue mode functions
+    updateDialogueProgress,
   };
 }

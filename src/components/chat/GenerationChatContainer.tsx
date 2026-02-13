@@ -24,7 +24,7 @@ import {
 } from "@/hooks/useGenerationMode";
 import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
 import { MODE_CONFIG } from "@/config/modes";
-import type { Message, ConversationBranch, Artifact, FileAttachment } from "@/types/chat";
+import type { Message, ConversationBranch, Artifact, FileAttachment, LearnerGoal } from "@/types/chat";
 import type { ActiveArtifactContext } from "@/hooks/useChat";
 import { cn } from "@/lib/utils";
 import { parseArtifacts } from "@/lib/artifacts";
@@ -55,6 +55,10 @@ interface GenerationChatContainerProps {
   conversationId?: string; // クイズ進行状況を保存するためのID
   // 初期状態（会話metadataから読み込み）
   initialGenerationState?: PersistedGenerationState;
+  // Goal setting (learner autonomy)
+  goal?: LearnerGoal | null;
+  onGoalEdit?: () => void;
+  onGoalClear?: () => void;
 }
 
 export function GenerationChatContainer({
@@ -142,6 +146,8 @@ export function GenerationChatContainer({
     loadQuizzesFromAPI,
     generateQuizzesForArtifact,
     answerQuizAPI,
+    // Dialogue mode functions
+    updateDialogueProgress,
   } = useGenerationMode(initialOptions);
 
   const prevMessagesLengthRef = useRef(0);
@@ -446,11 +452,20 @@ export function GenerationChatContainer({
 
       if (data.success) {
         if (data.data.isCorrect) {
-          // 次の質問を読み込む
-          setDialogueQuestion(null);
-          if (!data.data.isFullyUnlocked) {
-            setTimeout(loadDialogueQuestion, 500);
-          }
+          // 進捗を即座に更新（UIに反映）
+          updateDialogueProgress(
+            activeArtifact.id,
+            data.data.unlockLevel,
+            data.data.isFullyUnlocked
+          );
+
+          // フィードバック表示のため2.5秒待ってから次の質問を読み込む
+          setTimeout(() => {
+            setDialogueQuestion(null);
+            if (!data.data.isFullyUnlocked) {
+              setTimeout(loadDialogueQuestion, 500);
+            }
+          }, 2500);
         }
         return {
           isCorrect: data.data.isCorrect,
@@ -462,7 +477,7 @@ export function GenerationChatContainer({
       console.error("[DialogueUnlock] Failed to evaluate answer:", error);
       return { isCorrect: false, feedback: "通信エラーが発生しました" };
     }
-  }, [activeArtifact?.id, dialogueQuestion, loadDialogueQuestion]);
+  }, [activeArtifact?.id, dialogueQuestion, loadDialogueQuestion, updateDialogueProgress]);
 
   // 対話形式: アーティファクト変更時に質問を読み込む
   useEffect(() => {

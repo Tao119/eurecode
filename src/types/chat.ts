@@ -452,6 +452,76 @@ export interface ReflectionData {
 }
 
 // ===========================================
+// Learner Goal System (目標設定の裁量)
+// ===========================================
+
+export type GoalType = "skill" | "project" | "habit" | "custom";
+export type GoalTimeframe = "1week" | "1month" | "3months" | "6months" | "1year" | "none";
+
+export interface LearnerGoal {
+  id: string;
+  type: GoalType;
+  description: string;
+  timeframe?: GoalTimeframe;
+  successCriteria?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalTimeframeConfig {
+  value: GoalTimeframe;
+  label: string;
+}
+
+export interface GoalTypeConfig {
+  type: GoalType;
+  label: string;
+  description: string;
+  icon: string;
+  placeholder: string;
+}
+
+export const GOAL_TYPES: GoalTypeConfig[] = [
+  {
+    type: "skill",
+    label: "スキル習得",
+    description: "特定の技術やスキルを身につける",
+    icon: "school",
+    placeholder: "例: Reactのカスタムフックを使いこなせるようになる",
+  },
+  {
+    type: "project",
+    label: "プロジェクト達成",
+    description: "具体的な成果物を完成させる",
+    icon: "rocket_launch",
+    placeholder: "例: ポートフォリオサイトを公開する",
+  },
+  {
+    type: "habit",
+    label: "習慣づけ",
+    description: "学習習慣を身につける",
+    icon: "event_repeat",
+    placeholder: "例: 毎日30分コードを書く",
+  },
+  {
+    type: "custom",
+    label: "自由記述",
+    description: "自分なりの目標を設定",
+    icon: "edit_note",
+    placeholder: "自分の言葉で目標を書いてください",
+  },
+];
+
+export const GOAL_TIMEFRAMES: GoalTimeframeConfig[] = [
+  { value: "1week", label: "1週間" },
+  { value: "1month", label: "1ヶ月" },
+  { value: "3months", label: "3ヶ月" },
+  { value: "6months", label: "6ヶ月" },
+  { value: "1year", label: "1年" },
+  { value: "none", label: "期限なし" },
+];
+
+// ===========================================
 // Conversation Compacting (要約による履歴圧縮)
 // ===========================================
 
@@ -481,6 +551,8 @@ export interface ConversationMetadata {
   compactSummary?: ConversationCompactSummary;
   // 壁打ちモードのまとめ履歴
   summaries?: ConversationSummary[];
+  // 学習者の目標（自律性を高める）
+  learnerGoal?: LearnerGoal;
 }
 
 // 会話のまとめ
