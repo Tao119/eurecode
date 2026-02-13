@@ -186,10 +186,12 @@ export async function POST(
     }
 
     // Generate quizzes using AI
+    // Use the artifact's totalQuestions if available, otherwise estimateQuizCount will calculate it
     let generatedQuizzes = await generateQuizzesForArtifact({
       code: artifact.content,
       language: artifact.language || "javascript",
       title: artifact.title,
+      estimatedCount: artifact.totalQuestions > 0 ? artifact.totalQuestions : undefined,
     });
 
     // If AI generation fails, use fallback

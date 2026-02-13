@@ -641,6 +641,18 @@ export function GenerationChatContainer({
                   // Determine if this message is currently streaming
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
+                  // Check if this message contains artifact content (:::artifact markers)
+                  // This is the "artifact message" where currentQuiz should be displayed after
+                  const containsArtifact = message.role === "assistant" &&
+                    (message.content.includes(":::artifact") || message.content.includes("```artifact"));
+
+                  // Find if this is the last message with artifact content
+                  const isLastArtifactMessage = containsArtifact &&
+                    !messages.slice(index + 1).some((m) =>
+                      m.role === "assistant" &&
+                      (m.content.includes(":::artifact") || m.content.includes("```artifact"))
+                    );
+
                   // Process message content (remove quiz markers and artifact placeholders)
                   // Pass streaming state to hide incomplete tags during streaming
                   const processedMessage = message.role === "assistant"
@@ -652,6 +664,12 @@ export function GenerationChatContainer({
                   const completedQuizzesAfterThis = activeArtifactProgress.quizHistory.filter(
                     (item) => item.answeredAtMessageCount === index + 1 && item.isCorrect && item.completedQuiz
                   );
+
+                  // Should show currentQuiz after this message?
+                  // Show after artifact message, but only if not unlocked and we have a quiz or need to load one
+                  const shouldShowCurrentQuizHere = isLastArtifactMessage &&
+                    options.unlockMethod !== "explanation" &&
+                    !activeArtifactProgress.isUnlocked;
 
                   return (
                     <div key={message.id || index} id={`msg-${index}`}>
@@ -702,6 +720,84 @@ export function GenerationChatContainer({
                         </div>
                       ))}
 
+                      {/* 現在のクイズをアーティファクト生成メッセージの直後に表示 */}
+                      {shouldShowCurrentQuizHere && (
+                        state.currentQuiz ? (
+                          <div className="px-4 py-4">
+                            <GenerationQuiz
+                              quiz={state.currentQuiz}
+                              onAnswer={handleQuizAnswer}
+                              hintVisible={state.hintVisible}
+                              onSkip={canSkip ? handleSkip : undefined}
+                              canSkip={canSkip}
+                              isCollapsible={true}
+                              onAskAboutQuestion={(question, opts) => {
+                                const optionsList = opts.join("\n");
+                                sendMessageWithArtifact(
+                                  `このクイズについて教えてください：\n\n質問: ${question}\n\n選択肢:\n${optionsList}\n\n正解を教えずに、この問題を解くためのヒントや考え方を教えてください。`
+                                );
+                              }}
+                              onAskForMoreExplanation={(quiz, userAnswer) => {
+                                const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
+                                const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
+
+                                let message = `このクイズの解説をもっと詳しく教えてください：\n\n`;
+                                message += `【質問】\n${quiz.question}\n\n`;
+                                message += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
+                                if (correctOption?.explanation) {
+                                  message += `解説: ${correctOption.explanation}\n`;
+                                }
+
+                                if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
+                                  message += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
+                                  message += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
+                                } else {
+                                  message += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
+                                }
+
+                                sendMessageWithArtifact(message);
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          /* クイズがない場合: 読み込み中または再生成ボタン */
+                          activeArtifact && !isLoading && (
+                            <div className="px-4 py-4">
+                              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="size-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-yellow-400">quiz</span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-foreground/90">
+                                      クイズを読み込んでいます...
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      クイズに回答してコードをアンロックしましょう
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (activeArtifact.id) {
+                                        generateQuizzesForArtifact(activeArtifact.id).catch((error) => {
+                                          console.error("[GenerationChatContainer] Quiz regeneration failed:", error);
+                                        });
+                                      }
+                                    }}
+                                    className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
+                                  >
+                                    <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
+                                    クイズを再生成
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )
+                      )}
+
                     </div>
                   );
                 })}
@@ -736,9 +832,8 @@ export function GenerationChatContainer({
                   </div>
                 )}
 
-                {/* 理解度チェック: クイズ形式 or 対話形式 */}
-                {options.unlockMethod === "explanation" ? (
-                  /* 対話形式モード */
+                {/* 理解度チェック: 対話形式のみ（クイズ形式はメッセージループ内で表示） */}
+                {options.unlockMethod === "explanation" &&
                   activeArtifact && !activeArtifactProgress.isUnlocked && (
                     <div className="px-4 py-4">
                       {dialogueQuestion ? (
@@ -792,83 +887,7 @@ export function GenerationChatContainer({
                         </div>
                       )}
                     </div>
-                  )
-                ) : state.currentQuiz ? (
-                  /* クイズ形式モード（チャット内に表示、折りたたみ可能） */
-                  <div className="px-4 py-4">
-                    <GenerationQuiz
-                      quiz={state.currentQuiz}
-                      onAnswer={handleQuizAnswer}
-                      hintVisible={state.hintVisible}
-                      onSkip={canSkip ? handleSkip : undefined}
-                      canSkip={canSkip}
-                      isCollapsible={true}
-                      onAskAboutQuestion={(question, opts) => {
-                        const optionsList = opts.join("\n");
-                        sendMessageWithArtifact(
-                          `このクイズについて教えてください：\n\n質問: ${question}\n\n選択肢:\n${optionsList}\n\n正解を教えずに、この問題を解くためのヒントや考え方を教えてください。`
-                        );
-                      }}
-                      onAskForMoreExplanation={(quiz, userAnswer) => {
-                        const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
-                        const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
-
-                        let message = `このクイズの解説をもっと詳しく教えてください：\n\n`;
-                        message += `【質問】\n${quiz.question}\n\n`;
-                        message += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
-                        if (correctOption?.explanation) {
-                          message += `解説: ${correctOption.explanation}\n`;
-                        }
-
-                        if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
-                          message += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
-                          message += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
-                        } else {
-                          message += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
-                        }
-
-                        sendMessageWithArtifact(message);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  /* クイズがない場合: 読み込み中または再生成ボタン（新APIシステム） */
-                  activeArtifact && !activeArtifactProgress.isUnlocked && !isLoading && (
-                    <div className="px-4 py-4">
-                      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="size-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-yellow-400">quiz</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground/90">
-                              クイズを読み込んでいます...
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              クイズに回答してコードをアンロックしましょう
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              // APIからクイズを再生成
-                              if (activeArtifact.id) {
-                                generateQuizzesForArtifact(activeArtifact.id).catch((error) => {
-                                  console.error("[GenerationChatContainer] Quiz regeneration failed:", error);
-                                });
-                              }
-                            }}
-                            className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10"
-                          >
-                            <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
-                            クイズを再生成
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                )}
+                  )}
 
                 {/* クイズ完了通知と振り返り（全問正解後に表示） */}
                 {state.phase === "unlocked" && activeArtifactProgress.quizHistory.length > 0 && (
