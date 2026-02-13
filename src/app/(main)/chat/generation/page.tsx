@@ -4,10 +4,13 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { GenerationChatContainer, ModelSelector } from "@/components/chat";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
-import type { ClaudeModel } from "@/types/chat";
+import { GoalSettingModal } from "@/components/chat/GoalSettingModal";
+import { GoalTrigger } from "@/components/chat/GoalDisplay";
+import type { ClaudeModel, LearnerGoal, ConversationMetadata } from "@/types/chat";
 import { DEFAULT_MODEL } from "@/types/chat";
 import { useChat, ChatApiError } from "@/hooks/useChat";
 import { useCredits } from "@/hooks/useCredits";
+import { useGoal } from "@/hooks/useGoal";
 import { useUserSettingsOptional } from "@/contexts/UserSettingsContext";
 import { toast } from "sonner";
 import type { PersistedGenerationState } from "@/hooks/useGenerationMode";
@@ -77,6 +80,7 @@ export default function GenerationModePage() {
     generationRecovery,
     clearGenerationRecovery,
     restoredMetadata,
+    setExternalMetadata,
   } = useChat({
     mode: "generation",
     conversationId: currentConversationId || undefined,
@@ -86,6 +90,50 @@ export default function GenerationModePage() {
     onPointsConsumed: handlePointsConsumed,
     model: selectedModel,
   });
+
+  // Goal setting for learner autonomy
+  const handleMetadataChange = useCallback(
+    (metadata: Partial<ConversationMetadata>) => {
+      setExternalMetadata(metadata);
+    },
+    [setExternalMetadata]
+  );
+
+  const { goal, setGoal, clearGoal } = useGoal({
+    restoredMetadata,
+    onMetadataChange: handleMetadataChange,
+  });
+
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const goalModalShownRef = useRef(false);
+
+  // Show goal modal for new conversations
+  useEffect(() => {
+    if (
+      !currentConversationId &&
+      messages.length === 0 &&
+      !goalModalShownRef.current &&
+      !isLoading
+    ) {
+      const timer = setTimeout(() => {
+        setShowGoalModal(true);
+        goalModalShownRef.current = true;
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [currentConversationId, messages.length, isLoading]);
+
+  const handleGoalSubmit = useCallback(
+    (newGoal: LearnerGoal) => {
+      setGoal(newGoal);
+      setShowGoalModal(false);
+    },
+    [setGoal]
+  );
+
+  const handleGoalSkip = useCallback(() => {
+    setShowGoalModal(false);
+  }, []);
 
   // Disable project change once conversation has started
   const canChangeProject = messages.length === 0 && !currentConversationId;
@@ -127,36 +175,48 @@ export default function GenerationModePage() {
   }, [generationRecovery, clearGenerationRecovery]);
 
   return (
-    <GenerationChatContainer
-      messages={messages}
-      isLoading={isLoading}
-      onSendMessage={sendMessage}
-      welcomeMessage="実装したい機能を言葉で説明してください。計画を立て、コードを生成し、理解度を確認しながら進めます。"
-      inputPlaceholder="実装したい機能を説明してください..."
-      canSkip={canSkip}
-      onStopGeneration={stopGeneration}
-      onForkFromMessage={forkFromMessage}
-      branches={branches}
-      currentBranchId={currentBranchId}
-      onSwitchBranch={switchBranch}
-      onRegenerate={regenerateLastMessage}
-      canRegenerate={canRegenerate}
-      conversationId={currentConversationId || undefined}
-      initialGenerationState={initialGenerationState}
-      headerExtra={
-        <>
-          <ModelSelector
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            disabled={isLoading}
-          />
-          <ProjectSelector
-            selectedProjectId={selectedProjectId}
-            onProjectChange={setSelectedProjectId}
-            disabled={!canChangeProject}
-          />
-        </>
-      }
-    />
+    <>
+      <GoalSettingModal
+        open={showGoalModal}
+        onOpenChange={setShowGoalModal}
+        onSubmit={handleGoalSubmit}
+        onSkip={handleGoalSkip}
+      />
+      <GenerationChatContainer
+        messages={messages}
+        isLoading={isLoading}
+        onSendMessage={sendMessage}
+        welcomeMessage="実装したい機能を言葉で説明してください。計画を立て、コードを生成し、理解度を確認しながら進めます。"
+        inputPlaceholder="実装したい機能を説明してください..."
+        canSkip={canSkip}
+        onStopGeneration={stopGeneration}
+        onForkFromMessage={forkFromMessage}
+        branches={branches}
+        currentBranchId={currentBranchId}
+        onSwitchBranch={switchBranch}
+        onRegenerate={regenerateLastMessage}
+        canRegenerate={canRegenerate}
+        conversationId={currentConversationId || undefined}
+        initialGenerationState={initialGenerationState}
+        goal={goal}
+        onGoalEdit={() => setShowGoalModal(true)}
+        onGoalClear={clearGoal}
+        headerExtra={
+          <>
+            <GoalTrigger goal={goal} onClick={() => setShowGoalModal(true)} />
+            <ModelSelector
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              disabled={isLoading}
+            />
+            <ProjectSelector
+              selectedProjectId={selectedProjectId}
+              onProjectChange={setSelectedProjectId}
+              disabled={!canChangeProject}
+            />
+          </>
+        }
+      />
+    </>
   );
 }

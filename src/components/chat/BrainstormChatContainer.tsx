@@ -18,7 +18,7 @@ import {
   getPhaseCompletionCriteria,
 } from "@/hooks/useBrainstormMode";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
-import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata, FileAttachment } from "@/types/chat";
+import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata, FileAttachment, LearnerGoal } from "@/types/chat";
 import { BRAINSTORM_SUB_MODES } from "@/types/chat";
 import { BRAINSTORM_INITIAL_MESSAGES } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,10 @@ interface BrainstormChatContainerProps {
   onSubModeChange?: (subMode: BrainstormSubMode) => void;
   // Project selector
   headerExtra?: React.ReactNode;
+  // Goal setting (learner autonomy)
+  goal?: LearnerGoal | null;
+  onGoalEdit?: () => void;
+  onGoalClear?: () => void;
 }
 
 // AIレスポンスから適切なフェーズを検出（会話内容から判断）

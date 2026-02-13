@@ -11,7 +11,7 @@ import { parseLineReferences, findFirstCodeBlockInMessages } from "@/lib/line-re
 import { parseArtifacts } from "@/lib/artifacts";
 import { removeIncompleteStreamingTags } from "@/lib/quiz-generator";
 import { MODE_CONFIG } from "@/config/modes";
-import type { Message, ConversationBranch, FileAttachment } from "@/types/chat";
+import type { Message, ConversationBranch, FileAttachment, LearnerGoal } from "@/types/chat";
 import { cn } from "@/lib/utils";
 
 interface ExplanationChatContainerProps {
@@ -33,6 +33,10 @@ interface ExplanationChatContainerProps {
   headerExtra?: React.ReactNode;
   // Conversation ID for persistence
   conversationId?: string;
+  // Goal setting (learner autonomy)
+  goal?: LearnerGoal | null;
+  onGoalEdit?: () => void;
+  onGoalClear?: () => void;
 }
 
 export function ExplanationChatContainer({
