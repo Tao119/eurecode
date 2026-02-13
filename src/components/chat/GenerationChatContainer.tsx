@@ -720,7 +720,8 @@ export function GenerationChatContainer({
                               const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
                               const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
 
-                              let message = `このクイズの解説をもっと詳しく教えてください：\n\n`;
+                              let message = `【システム生成クイズについての質問】\n\n`;
+                              message += `※これはコード理解度確認のためにシステムが自動生成したクイズです（あなたが出題したものではありません）。以下のクイズについて詳しく解説してください。\n\n`;
                               message += `【質問】\n${quiz.question}\n\n`;
                               message += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
                               if (correctOption?.explanation) {
@@ -761,7 +762,8 @@ export function GenerationChatContainer({
                                 const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
                                 const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
 
-                                let message = `このクイズの解説をもっと詳しく教えてください：\n\n`;
+                                let message = `【システム生成クイズについての質問】\n\n`;
+                                message += `※これはコード理解度確認のためにシステムが自動生成したクイズです（あなたが出題したものではありません）。以下のクイズについて詳しく解説してください。\n\n`;
                                 message += `【質問】\n${quiz.question}\n\n`;
                                 message += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
                                 if (correctOption?.explanation) {
@@ -987,7 +989,8 @@ export function GenerationChatContainer({
                               const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
                               const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
 
-                              let message = `このクイズの解説をもっと詳しく教えてください：\n\n`;
+                              let message = `【システム生成クイズについての質問】\n\n`;
+                              message += `※これはコード理解度確認のためにシステムが自動生成したクイズです（あなたが出題したものではありません）。以下のクイズについて詳しく解説してください。\n\n`;
                               message += `【質問】\n${quiz.question}\n\n`;
                               message += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
                               if (correctOption?.explanation) {
