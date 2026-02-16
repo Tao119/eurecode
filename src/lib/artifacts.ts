@@ -6,13 +6,20 @@ export interface ParsedArtifact extends Artifact {
 }
 
 /**
- * Generate a unique artifact ID
- * Uses timestamp + random string to ensure uniqueness across users
+ * Generate a deterministic artifact ID based on title (filename)
+ * This ensures the same file always gets the same ID, preventing duplicates
  */
-function generateUniqueId(prefix: string): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
-  const id = `${prefix}-${timestamp}-${random}`;
+function generateDeterministicId(title: string): string {
+  // Normalize the title to create a stable ID
+  // Remove file extension variations and special characters
+  const normalized = title
+    .toLowerCase()
+    .replace(/\s+/g, "-") // spaces to hyphens
+    .replace(/[^a-z0-9\-_.]/g, "") // keep only safe characters
+    .replace(/-+/g, "-") // collapse multiple hyphens
+    .replace(/^-|-$/g, ""); // trim hyphens
+
+  const id = `artifact-${normalized}`;
   // Limit to 100 characters for API validation
   return id.length > 100 ? id.slice(0, 100) : id;
 }
@@ -55,9 +62,9 @@ export function parseArtifacts(content: string): {
           language?: string;
         };
 
-        // Generate globally unique ID using timestamp + random string
-        // This ensures uniqueness across different users and sessions
-        const uniqueId = generateUniqueId(meta.id);
+        // Generate deterministic ID based on title (filename)
+        // This ensures the same file always gets the same ID, preventing duplicates
+        const uniqueId = generateDeterministicId(meta.title);
         usedIds.add(uniqueId);
 
         artifacts.push({
@@ -125,12 +132,14 @@ function parseTruncatedArtifact(content: string): ParsedArtifact | null {
     code = code.replace(/`{0,2}$/, "").trim();
 
     const now = new Date().toISOString();
-    // Generate unique ID for truncated artifact
-    const truncatedId = generateUniqueId(`${meta.id}-truncated`);
+    // Generate deterministic ID for truncated artifact based on title
+    // Use the same base ID as complete artifact + "-truncated" suffix
+    const baseId = generateDeterministicId(meta.title);
+    const truncatedId = `${baseId}-truncated`;
     return {
       id: truncatedId,
       type: meta.type || "code",
-      title: `${meta.title} (途中)`,
+      title: meta.title, // Don't add "(途中)" - the truncated state is tracked by isTruncated flag
       content: code,
       language,
       createdAt: now,
@@ -182,10 +191,12 @@ export function extractCodeBlocks(content: string): Artifact[] {
       continue;
     }
 
+    // Generate deterministic ID based on language and index
+    const title = `${language} #${index}`;
     artifacts.push({
-      id: `code-${index}-${Date.now()}`,
+      id: generateDeterministicId(title),
       type: "code",
-      title: `${language} #${index}`,
+      title,
       content: code,
       language,
       createdAt: now,
