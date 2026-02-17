@@ -32,6 +32,7 @@ interface AccessKeySettings {
   allowedModes?: ("explanation" | "generation" | "brainstorm")[];
   allowedTechStacks?: string[];
   unlockSkipAllowed?: boolean;
+  assignRole?: "admin" | "member";
 }
 
 interface AccessKey {
@@ -89,6 +90,8 @@ const statusLabels: Record<AccessKey["status"], { label: string; color: string }
 
 export default function AccessKeysPage() {
   const { data: session } = useSession();
+  const currentUserIsOwner = session?.user?.userType === "owner";
+
   const [data, setData] = useState<KeysResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,6 +108,7 @@ export default function AccessKeysPage() {
   const [keyCount, setKeyCount] = useState(1);
   const [creditLimit, setCreditLimit] = useState(100);
   const [expiresIn, setExpiresIn] = useState<"1week" | "1month" | "3months" | "never">("1month");
+  const [assignRole, setAssignRole] = useState<"admin" | "member">("member");
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -189,6 +193,7 @@ export default function AccessKeysPage() {
           count: keyCount,
           dailyTokenLimit: creditLimit,
           expiresIn,
+          ...(currentUserIsOwner && assignRole && { assignRole }),
         }),
       });
 
@@ -203,6 +208,7 @@ export default function AccessKeysPage() {
         setCreatedKeys(result.data.keys.map((k: { keyCode: string }) => k.keyCode));
         setCreateDialogOpen(false);
         setShowCreatedDialog(true);
+        setAssignRole("member"); // Reset role selection
         fetchKeys();
         toast.success("キーを発行しました");
       } else {
@@ -680,6 +686,7 @@ export default function AccessKeysPage() {
           <div className="sm:hidden space-y-3">
             {filteredKeys.map((key) => {
               const status = statusLabels[key.status];
+              const isAdminKey = key.settings?.assignRole === "admin";
               return (
                 <div key={key.id} className="p-3 border rounded-lg space-y-2">
                   <div className="flex items-center justify-between">
@@ -697,6 +704,11 @@ export default function AccessKeysPage() {
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <span className="material-symbols-outlined text-lg">hourglass_empty</span>
                           <span className="text-sm">登録待ち</span>
+                          {isAdminKey && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 shrink-0">
+                              管理者権限
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -808,6 +820,7 @@ export default function AccessKeysPage() {
               <tbody>
                 {filteredKeys.map((key) => {
                   const status = statusLabels[key.status];
+                  const isAdminKey = key.settings?.assignRole === "admin";
                   return (
                     <tr key={key.id} className="border-b border-border last:border-0">
                       <td className="py-3 px-4">
@@ -829,6 +842,11 @@ export default function AccessKeysPage() {
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <span className="material-symbols-outlined text-lg">hourglass_empty</span>
                             <span className="text-sm">登録待ち</span>
+                            {isAdminKey && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400">
+                                管理者権限
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1001,6 +1019,47 @@ export default function AccessKeysPage() {
                 ))}
               </div>
             </div>
+
+            {/* Role assignment - Only visible to owners */}
+            {currentUserIsOwner && (
+              <div className="space-y-2">
+                <Label>権限</Label>
+                <p className="text-xs text-muted-foreground">
+                  このキーで登録するユーザーの権限を設定します
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setAssignRole("member")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors cursor-pointer",
+                      assignRole === "member"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/50"
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-base">person</span>
+                    メンバー
+                  </button>
+                  <button
+                    onClick={() => setAssignRole("admin")}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors cursor-pointer",
+                      assignRole === "admin"
+                        ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                        : "border-border hover:border-amber-500/50"
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-base">shield_person</span>
+                    管理者
+                  </button>
+                </div>
+                {assignRole === "admin" && (
+                  <p className="text-xs text-amber-500">
+                    管理者はポイント割り振りやアクセスキー発行が可能になります
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, isOrganizationAdmin } from "@/lib/auth";
+import { auth, isOrganizationAdmin, isOrganizationOwner } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -222,6 +222,7 @@ const createKeySchema = z.object({
   count: z.number().int().min(1).max(100).default(1),
   dailyTokenLimit: z.number().int().min(1).max(100000).default(100),
   expiresIn: z.enum(["1week", "1month", "3months", "never"]).default("1month"),
+  assignRole: z.enum(["admin", "member"]).optional(), // オーナーのみがadminを指定可能
   settings: z.object({
     allowedModes: z.array(z.enum(["explanation", "generation", "brainstorm"])).optional(),
     allowedTechStacks: z.array(z.string()).optional(),
@@ -263,7 +264,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { count, dailyTokenLimit, expiresIn, settings } = parsed.data;
+    const { count, dailyTokenLimit, expiresIn, assignRole, settings } = parsed.data;
+
+    // Only owners can assign admin role
+    if (assignRole === "admin" && !isOrganizationOwner(session.user.userType)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "管理者権限の付与はオーナーのみ可能です",
+          },
+        },
+        { status: 403 }
+      );
+    }
 
     // Get organization plan limits
     const organization = await prisma.organization.findUnique({
@@ -352,13 +367,19 @@ export async function POST(request: NextRequest) {
       }
       generatedKeyCodes.push(keyCode);
 
+      // Merge assignRole into settings
+      const keySettings = {
+        ...settings,
+        ...(assignRole && { assignRole }),
+      };
+
       keysToCreate.push({
         organizationId: session.user.organizationId,
         keyCode,
         dailyTokenLimit,
         expiresAt,
         status: "active",
-        settings: settings as Prisma.InputJsonValue,
+        settings: keySettings as Prisma.InputJsonValue,
       });
     }
 
@@ -376,6 +397,7 @@ export async function POST(request: NextRequest) {
         id: true,
         keyCode: true,
         dailyTokenLimit: true,
+        settings: true,
         expiresAt: true,
         createdAt: true,
       },
@@ -385,13 +407,17 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         count: createdKeys.length,
-        keys: createdKeys.map((k) => ({
-          id: k.id,
-          keyCode: k.keyCode,
-          dailyTokenLimit: k.dailyTokenLimit,
-          expiresAt: k.expiresAt?.toISOString() || null,
-          createdAt: k.createdAt.toISOString(),
-        })),
+        keys: createdKeys.map((k) => {
+          const keySettings = k.settings as { assignRole?: "admin" | "member" } | null;
+          return {
+            id: k.id,
+            keyCode: k.keyCode,
+            dailyTokenLimit: k.dailyTokenLimit,
+            assignRole: keySettings?.assignRole || "member",
+            expiresAt: k.expiresAt?.toISOString() || null,
+            createdAt: k.createdAt.toISOString(),
+          };
+        }),
       },
     });
   } catch (error) {

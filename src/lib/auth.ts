@@ -315,12 +315,16 @@ export const authConfig: NextAuthConfig = {
           });
         } else {
           // First registration: Create new member user with email and password
+          // Get the assignRole from access key settings (default to "member")
+          const keySettings = accessKey.settings as { assignRole?: "admin" | "member" } | null;
+          const assignedRole = keySettings?.assignRole || "member";
+
           targetUser = await prisma.user.create({
             data: {
               email,
               passwordHash,
               displayName,
-              userType: "member",
+              userType: assignedRole,
               organizationId: accessKey.organizationId,
               emailVerified: new Date(), // Auto-verify for access key registration
             },
@@ -422,12 +426,16 @@ export const authConfig: NextAuthConfig = {
             return "/join?error=EMAIL_ALREADY_EXISTS";
           }
 
+          // Get the assignRole from access key settings (default to "member")
+          const keySettings = accessKey.settings as { assignRole?: "admin" | "member" } | null;
+          const assignedRole = keySettings?.assignRole || "member";
+
           // Create member user with Google account
           const newMember = await prisma.user.create({
             data: {
               email,
               displayName: profile?.name || email.split("@")[0],
-              userType: "member",
+              userType: assignedRole,
               organizationId: accessKey.organizationId,
               emailVerified: new Date(),
               accounts: {
