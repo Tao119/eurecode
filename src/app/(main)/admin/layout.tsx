@@ -36,6 +36,11 @@ const adminNavItems = [
   },
 ];
 
+// Helper function to check if user is organization admin (owner or admin)
+function isOrganizationAdmin(userType: string | undefined): boolean {
+  return userType === "owner" || userType === "admin";
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -49,7 +54,7 @@ export default function AdminLayout({
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/admin");
-    } else if (status === "authenticated" && session?.user.userType !== "admin") {
+    } else if (status === "authenticated" && !isOrganizationAdmin(session?.user.userType)) {
       router.push("/home");
     }
   }, [status, session, router]);
@@ -81,7 +86,7 @@ export default function AdminLayout({
     );
   }
 
-  if (status === "unauthenticated" || session?.user.userType !== "admin") {
+  if (status === "unauthenticated" || !isOrganizationAdmin(session?.user.userType)) {
     return null;
   }
 

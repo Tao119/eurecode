@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationOwner } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import {
@@ -31,13 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 組織メンバーは購入不可
+    // 組織メンバーと管理者（非オーナー）は購入不可
+    // 購入可能: individual（個人ユーザー）、owner（組織オーナー）
     const userType = session.user.userType;
-    if (userType === "member") {
+    if (userType === "member" || userType === "admin") {
       return NextResponse.json(
         {
-          error: "Organization members cannot purchase credits",
-          errorJa: "組織メンバーはクレジットを購入できません",
+          error: "Only organization owners can purchase credits",
+          errorJa: "クレジット購入は組織オーナーのみ可能です",
         },
         { status: 403 }
       );

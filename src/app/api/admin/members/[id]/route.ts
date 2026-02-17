@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -45,12 +45,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    // Get member with full details (include admin as well)
+    // Get member with full details (include owner, admin and member)
     const member = await prisma.user.findFirst({
       where: {
         id,
         organizationId: session.user.organizationId,
-        userType: { in: ["member", "admin"] },
+        userType: { in: ["owner", "admin", "member"] },
       },
       select: {
         id: true,
@@ -200,7 +200,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
           id: member.id,
           displayName: member.displayName,
           email: member.email,
-          isAdmin: member.userType === "admin",
+          role: member.userType, // "owner", "admin", or "member"
+          isOwner: member.userType === "owner",
+          isAdmin: member.userType === "admin" || member.userType === "owner",
           joinedAt: member.createdAt.toISOString(),
           lastActiveAt: lastActiveAt?.toISOString() || null,
           status: isActive ? "active" : "inactive",
@@ -284,7 +286,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -309,12 +311,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Verify member belongs to organization (include admin)
+    // Verify member belongs to organization (include owner, admin and member)
     const member = await prisma.user.findFirst({
       where: {
         id,
         organizationId: session.user.organizationId,
-        userType: { in: ["member", "admin"] },
+        userType: { in: ["owner", "admin", "member"] },
       },
       select: { id: true, userType: true, settings: true },
     });
@@ -326,8 +328,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Prevent disabling admin users
-    if (member.userType === "admin" && parsed.data.isEnabled === false) {
+    // Prevent disabling owner or admin users
+    if ((member.userType === "owner" || member.userType === "admin") && parsed.data.isEnabled === false) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者を無効にすることはできません" } },
         { status: 403 }
@@ -383,7 +385,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }

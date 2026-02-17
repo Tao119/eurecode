@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -112,7 +112,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -272,7 +272,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -362,7 +362,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }

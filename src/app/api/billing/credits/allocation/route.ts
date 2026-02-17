@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
 
-    if (userType === "admin") {
+    if (isOrganizationAdmin(userType)) {
       // 管理者：全メンバーの割り当て一覧
       const allocations = await prisma.creditAllocation.findMany({
         where: {
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userType = session.user.userType;
-    if (userType !== "admin") {
+    if (!isOrganizationAdmin(userType)) {
       return NextResponse.json(
         { error: "Only admins can allocate credits" },
         { status: 403 }

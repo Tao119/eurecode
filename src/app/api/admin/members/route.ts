@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }
@@ -43,10 +43,10 @@ export async function GET(request: NextRequest) {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Build where clause (include both admin and member)
+    // Build where clause (include owner, admin and member)
     const whereClause: Prisma.UserWhereInput = {
       organizationId: session.user.organizationId,
-      userType: { in: ["member", "admin"] },
+      userType: { in: ["owner", "admin", "member"] },
       ...(search && {
         displayName: { contains: search, mode: "insensitive" as const },
       }),
@@ -118,7 +118,9 @@ export async function GET(request: NextRequest) {
         id: member.id,
         displayName: member.displayName,
         email: member.email,
-        isAdmin: member.userType === "admin",
+        role: member.userType, // "owner", "admin", or "member"
+        isOwner: member.userType === "owner",
+        isAdmin: member.userType === "admin" || member.userType === "owner",
         joinedAt: member.createdAt.toISOString(),
         lastActiveAt: lastActiveAt?.toISOString() || null,
         allocatedPoints,

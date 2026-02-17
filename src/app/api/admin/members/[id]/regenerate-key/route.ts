@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (session.user.userType !== "admin") {
+    if (!isOrganizationAdmin(session.user.userType)) {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "管理者権限が必要です" } },
         { status: 403 }

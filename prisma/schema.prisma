@@ -16,8 +16,9 @@ datasource db {
 
 enum UserType {
   individual
-  admin
-  member
+  owner  // 組織オーナー（購入・プラン変更・全管理権限）
+  admin  // 組織管理者（ポイント割り振り・アクセスキー発行のみ）
+  member // 組織メンバー
 }
 
 // 個人プラン

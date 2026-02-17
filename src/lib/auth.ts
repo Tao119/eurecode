@@ -662,3 +662,26 @@ export const authConfig: NextAuthConfig = {
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+
+/**
+ * 組織の管理者権限を持っているかチェック（owner または admin）
+ * アクセスキー発行、ポイント割り振り、メンバー管理などの権限
+ */
+export function isOrganizationAdmin(userType: UserType): boolean {
+  return userType === "owner" || userType === "admin";
+}
+
+/**
+ * 組織のオーナー権限を持っているかチェック（owner のみ）
+ * プラン変更、購入、組織設定の変更などの権限
+ */
+export function isOrganizationOwner(userType: UserType): boolean {
+  return userType === "owner";
+}
+
+/**
+ * 組織のメンバーかどうかチェック（owner, admin, member のいずれか）
+ */
+export function isOrganizationMember(userType: UserType): boolean {
+  return userType === "owner" || userType === "admin" || userType === "member";
+}

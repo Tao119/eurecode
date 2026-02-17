@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationOwner } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createPortalSession } from "@/lib/stripe";
 
@@ -20,6 +20,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "No active subscription found" },
         { status: 400 }
+      );
+    }
+
+    // 組織の場合、オーナーのみがポータルにアクセス可能
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { userType: true },
+    });
+    if (user?.userType === "admin" || user?.userType === "member") {
+      return NextResponse.json(
+        { error: "Only organization owner can access billing portal" },
+        { status: 403 }
       );
     }
 

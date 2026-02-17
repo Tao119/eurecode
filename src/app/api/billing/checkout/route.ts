@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isOrganizationOwner } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   createCheckoutSession,
@@ -58,6 +58,16 @@ export async function POST(request: NextRequest) {
     let priceId: string | undefined;
 
     if (isOrganization) {
+      // 組織プランの購入はオーナーのみ
+      if (!isOrganizationOwner(session.user.userType)) {
+        return NextResponse.json(
+          {
+            error: "Only organization owner can purchase plans",
+            errorJa: "プランの購入は組織オーナーのみ可能です",
+          },
+          { status: 403 }
+        );
+      }
       const orgPlan = plan as OrganizationPlan;
       if (!ORGANIZATION_PLANS[orgPlan]) {
         return NextResponse.json(

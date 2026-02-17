@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useTransition } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +29,8 @@ interface Member {
   id: string;
   displayName: string;
   email: string | null;
+  role: "owner" | "admin" | "member"; // new: explicit role field
+  isOwner: boolean;
   isAdmin: boolean;
   joinedAt: string;
   lastActiveAt: string | null;
@@ -63,6 +66,8 @@ interface MemberDetail {
     id: string;
     displayName: string;
     email: string | null;
+    role: "owner" | "admin" | "member";
+    isOwner: boolean;
     isAdmin: boolean;
     joinedAt: string;
     lastActiveAt: string | null;
@@ -133,6 +138,9 @@ interface MembersResponse {
 }
 
 export default function MembersPage() {
+  const { data: session } = useSession();
+  const currentUserIsOwner = session?.user?.userType === "owner";
+
   const [data, setData] = useState<MembersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,6 +149,10 @@ export default function MembersPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Role change state
+  const [showRoleChangeDialog, setShowRoleChangeDialog] = useState(false);
+  const [isChangingRole, setIsChangingRole] = useState(false);
 
   // Password reset state
   const [showPasswordResetDialog, setShowPasswordResetDialog] = useState(false);
@@ -285,6 +297,44 @@ export default function MembersPage() {
       toast.error("削除に失敗しました");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleRoleChange = async (newRole: "admin" | "member") => {
+    if (!selectedMember) return;
+
+    setIsChangingRole(true);
+    try {
+      const response = await fetch(`/api/admin/members/${selectedMember.member.id}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success(result.data.message);
+        setShowRoleChangeDialog(false);
+        // Update the selected member's role locally
+        startTransition(() => {
+          setSelectedMember({
+            ...selectedMember,
+            member: {
+              ...selectedMember.member,
+              role: newRole,
+              isAdmin: newRole === "admin",
+            },
+          });
+        });
+        // Refresh the members list
+        fetchMembers();
+      } else {
+        toast.error(result.error?.message || "ロールの変更に失敗しました");
+      }
+    } catch (error) {
+      console.error("Failed to change role:", error);
+      toast.error("ロールの変更に失敗しました");
+    } finally {
+      setIsChangingRole(false);
     }
   };
 
@@ -635,9 +685,12 @@ export default function MembersPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <div className={cn(
                         "size-8 rounded-full flex items-center justify-center font-medium text-sm shrink-0",
-                        member.isAdmin ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
+                        member.isOwner ? "bg-purple-500/20 text-purple-400" :
+                        member.role === "admin" ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
                       )}>
-                        {member.isAdmin ? (
+                        {member.isOwner ? (
+                          <span className="material-symbols-outlined text-base">verified_user</span>
+                        ) : member.role === "admin" ? (
                           <span className="material-symbols-outlined text-base">shield_person</span>
                         ) : (
                           member.displayName?.charAt(0) || "?"
@@ -648,7 +701,12 @@ export default function MembersPage() {
                           <span className="font-medium text-sm truncate">
                             {member.displayName || "名前未設定"}
                           </span>
-                          {member.isAdmin && (
+                          {member.isOwner && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 shrink-0">
+                              オーナー
+                            </span>
+                          )}
+                          {member.role === "admin" && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 shrink-0">
                               管理者
                             </span>
@@ -744,9 +802,12 @@ export default function MembersPage() {
                         <div className="flex items-center gap-3">
                           <div className={cn(
                             "size-8 rounded-full flex items-center justify-center font-medium text-sm",
-                            member.isAdmin ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
+                            member.isOwner ? "bg-purple-500/20 text-purple-400" :
+                            member.role === "admin" ? "bg-amber-500/20 text-amber-400" : "bg-primary/20 text-primary"
                           )}>
-                            {member.isAdmin ? (
+                            {member.isOwner ? (
+                              <span className="material-symbols-outlined text-base">verified_user</span>
+                            ) : member.role === "admin" ? (
                               <span className="material-symbols-outlined text-base">shield_person</span>
                             ) : (
                               member.displayName?.charAt(0) || "?"
@@ -755,7 +816,12 @@ export default function MembersPage() {
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{member.displayName || "名前未設定"}</span>
-                              {member.isAdmin && (
+                              {member.isOwner && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                                  オーナー
+                                </span>
+                              )}
+                              {member.role === "admin" && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400">
                                   管理者
                                 </span>
@@ -862,7 +928,13 @@ export default function MembersPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-xl font-bold">{selectedMember.member.displayName || "名前未設定"}</h3>
-                    {selectedMember.member.isAdmin && (
+                    {selectedMember.member.isOwner && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400">
+                        <span className="material-symbols-outlined text-sm">verified_user</span>
+                        オーナー
+                      </span>
+                    )}
+                    {selectedMember.member.role === "admin" && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400">
                         <span className="material-symbols-outlined text-sm">shield_person</span>
                         管理者
@@ -885,18 +957,18 @@ export default function MembersPage() {
                   <div>
                     <p className="font-medium text-sm">アカウント有効</p>
                     <p className="text-xs text-muted-foreground">
-                      {selectedMember.member.isAdmin
-                        ? "管理者アカウントは無効化できません"
+                      {selectedMember.member.isOwner || selectedMember.member.role === "admin"
+                        ? "オーナー/管理者アカウントは無効化できません"
                         : "無効にするとメンバーはログインできなくなります"}
                     </p>
                   </div>
                   <button
                     onClick={() => handleToggleEnabled(selectedMember.member.id, !selectedMember.member.isEnabled)}
-                    disabled={isPending || selectedMember.member.isAdmin}
+                    disabled={isPending || selectedMember.member.isOwner || selectedMember.member.role === "admin"}
                     className={cn(
                       "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
                       selectedMember.member.isEnabled ? "bg-green-500" : "bg-muted",
-                      (isPending || selectedMember.member.isAdmin) && "opacity-50 cursor-not-allowed"
+                      (isPending || selectedMember.member.isOwner || selectedMember.member.role === "admin") && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     <span
@@ -908,6 +980,43 @@ export default function MembersPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Role Management - Only visible to owners for non-owner members */}
+              {currentUserIsOwner && !selectedMember.member.isOwner && (
+                <div className="p-4 border border-amber-500/30 rounded-lg space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-amber-400">shield_person</span>
+                    <h4 className="font-medium">ロール管理</h4>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">現在のロール</p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedMember.member.role === "admin"
+                          ? "管理者はポイント割り振りやアクセスキー発行が可能です"
+                          : "一般メンバーはサービスの利用のみ可能です"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "px-2 py-1 rounded text-xs font-medium",
+                        selectedMember.member.role === "admin"
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        {selectedMember.member.role === "admin" ? "管理者" : "メンバー"}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowRoleChangeDialog(true)}
+                      >
+                        変更
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Feature Settings */}
               <div className="p-4 border rounded-lg space-y-4">
@@ -1017,8 +1126,8 @@ export default function MembersPage() {
                 )}
               </div>
 
-              {/* Danger Zone - Hidden for admins */}
-              {!selectedMember.member.isAdmin && (
+              {/* Danger Zone - Hidden for owners and admins */}
+              {!selectedMember.member.isOwner && selectedMember.member.role !== "admin" && (
                 <div className="p-4 border border-destructive/50 rounded-lg">
                   <h4 className="font-medium text-destructive mb-3">危険な操作</h4>
                   <div className="flex items-center justify-between">
@@ -1490,6 +1599,89 @@ export default function MembersPage() {
               ) : (
                 "更新する"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Role Change Confirmation Dialog */}
+      <Dialog open={showRoleChangeDialog} onOpenChange={setShowRoleChangeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ロールを変更</DialogTitle>
+            <DialogDescription>
+              {selectedMember?.member.displayName}さんのロールを変更します
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <div className="space-y-3">
+              <button
+                onClick={() => handleRoleChange("admin")}
+                disabled={isChangingRole || selectedMember?.member.role === "admin"}
+                className={cn(
+                  "w-full p-4 border rounded-lg text-left transition-colors",
+                  selectedMember?.member.role === "admin"
+                    ? "border-amber-500/50 bg-amber-500/10"
+                    : "border-border hover:border-amber-500/50 hover:bg-amber-500/5",
+                  isChangingRole && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-amber-400">shield_person</span>
+                  <div>
+                    <p className="font-medium">管理者</p>
+                    <p className="text-xs text-muted-foreground">
+                      ポイント割り振り、アクセスキー発行、メンバー管理が可能
+                    </p>
+                  </div>
+                  {selectedMember?.member.role === "admin" && (
+                    <span className="ml-auto px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded">
+                      現在
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleRoleChange("member")}
+                disabled={isChangingRole || selectedMember?.member.role === "member"}
+                className={cn(
+                  "w-full p-4 border rounded-lg text-left transition-colors",
+                  selectedMember?.member.role === "member"
+                    ? "border-primary/50 bg-primary/10"
+                    : "border-border hover:border-primary/50 hover:bg-primary/5",
+                  isChangingRole && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-primary">person</span>
+                  <div>
+                    <p className="font-medium">一般メンバー</p>
+                    <p className="text-xs text-muted-foreground">
+                      サービスの利用のみ可能
+                    </p>
+                  </div>
+                  {selectedMember?.member.role === "member" && (
+                    <span className="ml-auto px-2 py-1 text-xs bg-primary/20 text-primary rounded">
+                      現在
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
+
+            {isChangingRole && (
+              <div className="flex items-center justify-center py-2">
+                <LoadingSpinner size="sm" className="mr-2" />
+                <span className="text-sm text-muted-foreground">変更中...</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRoleChangeDialog(false)}>
+              キャンセル
             </Button>
           </DialogFooter>
         </DialogContent>
