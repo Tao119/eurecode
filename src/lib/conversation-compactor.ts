@@ -1,6 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { createAnthropicClient as createClient } from "@/lib/anthropic";
+import { createAnthropicClient as createClient, type AnthropicClient } from "@/lib/anthropic";
 import type { ChatMode } from "@/generated/prisma/client";
 import type { ConversationCompactSummary, ConversationMetadata } from "@/types/chat";
 import { estimateTokens } from "@/lib/token-limit";
@@ -15,7 +14,7 @@ const COMPACTING_CONFIG = {
   /** Minimum messages before compacting is considered */
   MIN_MESSAGES_FOR_COMPACT: 10,
   /** Claude model for summarization (Haiku for speed and cost) */
-  SUMMARY_MODEL: "claude-haiku-4-20250514",
+  SUMMARY_MODEL: "anthropic.claude-haiku-4-5-20251001-v1:0",
   /** Max tokens for the summary response */
   SUMMARY_MAX_TOKENS: 512,
 } as const;
@@ -55,7 +54,7 @@ export async function compactConversationIfNeeded(
   systemPrompt: string,
   existingMetadata?: ConversationMetadata | null,
   /** Pass the caller's Anthropic client to avoid creating a new instance */
-  anthropicClient?: Anthropic,
+  anthropicClient?: AnthropicClient,
 ): Promise<CompactResult> {
   const existingSummary = existingMetadata?.compactSummary;
   const decision = getCompactDecision(messages, systemPrompt, existingSummary);
@@ -197,7 +196,7 @@ async function generateSummary(
   messages: CompactableMessage[],
   mode: ChatMode,
   previousSummary?: string,
-  existingClient?: Anthropic,
+  existingClient?: AnthropicClient,
 ): Promise<string> {
   const anthropic = existingClient ?? createAnthropicClientFallback();
   const prompt = buildSummarizationPrompt(messages, mode, previousSummary);
@@ -217,7 +216,7 @@ async function generateSummary(
   return textBlock.text;
 }
 
-function createAnthropicClientFallback(): Anthropic {
+function createAnthropicClientFallback(): AnthropicClient {
   return createClient();
 }
 

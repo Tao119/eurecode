@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id;
     const selectedModel: ClaudeModel = model || DEFAULT_MODEL;
 
-    // Check if API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
+    // Check if AWS credentials are configured (profile or env vars)
+    if (!process.env.AWS_PROFILE && !process.env.AWS_ACCESS_KEY_ID) {
       return new Response(
         JSON.stringify({
           success: false,

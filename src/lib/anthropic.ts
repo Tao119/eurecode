@@ -1,25 +1,26 @@
 /**
- * Anthropic Client Factory & Error Classification
+ * Anthropic Bedrock Client Factory & Error Classification
  *
+ * Amazon Bedrock経由でClaude APIを呼び出す。
  * - maxRetries: 3 でSDKの自動リトライ（429, 5xx にexponential backoff）
  * - classifyApiError: リトライ耗尽時にユーザーフレンドリーなエラーを返す
  */
 
+import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
 import Anthropic from "@anthropic-ai/sdk";
+
+/** Bedrock経由のAnthropicクライアント型 */
+export type AnthropicClient = AnthropicBedrock;
 
 const DEFAULT_MAX_RETRIES = 3;
 
 /**
- * 標準設定のAnthropicクライアントを作成する。
+ * Amazon Bedrock経由のAnthropicクライアントを作成する。
  * SDKが429/5xxエラーをexponential backoffで自動リトライする。
  */
-export function createAnthropicClient(apiKey?: string): Anthropic {
-  const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-  return new Anthropic({
-    apiKey: key,
+export function createAnthropicClient(): AnthropicBedrock {
+  return new AnthropicBedrock({
+    awsRegion: process.env.AWS_REGION || "us-east-1",
     maxRetries: DEFAULT_MAX_RETRIES,
   });
 }
@@ -66,6 +67,19 @@ export function classifyApiError(error: unknown): ClassifiedError {
       message: "AIサービスでエラーが発生しました。",
       code: "API_ERROR",
       retryable: error.status >= 500,
+    };
+  }
+
+  // AWS ThrottlingException (Bedrock固有)
+  if (
+    error instanceof Error &&
+    error.message.includes("ThrottlingException")
+  ) {
+    return {
+      message:
+        "サーバーが混雑しています。しばらくしてからもう一度お試しください。",
+      code: "RATE_LIMITED",
+      retryable: true,
     };
   }
 

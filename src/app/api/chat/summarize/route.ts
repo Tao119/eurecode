@@ -102,8 +102,8 @@ export async function POST(request: NextRequest) {
 
     const { conversationId, messages, brainstormState, saveSummary } = parsed.data;
 
-    // Check if API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
+    // Check if AWS credentials are configured (profile or env vars)
+    if (!process.env.AWS_PROFILE && !process.env.AWS_ACCESS_KEY_ID) {
       return NextResponse.json(
         { success: false, error: { code: "CONFIG_ERROR", message: "AI service is not configured" } },
         { status: 500 }
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     // Generate summary using Claude (non-streaming for simplicity)
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514", // Use Sonnet for cost efficiency
+      model: "anthropic.claude-sonnet-4-6", // Use Sonnet for cost efficiency
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],

@@ -14,7 +14,7 @@ Eurecodeは「コードを渡すのではなく、思考プロセスを渡す」
 - **フォーム**: React Hook Form + Zod
 - **ORM**: Prisma
 - **認証**: NextAuth.js v5
-- **AI**: Anthropic Claude API
+- **AI**: Claude via Amazon Bedrock
 - **決済**: Stripe
 
 ## ディレクトリ構造
@@ -175,7 +175,8 @@ interface ApiResponse<T> {
 
 ```env
 # 必須
-ANTHROPIC_API_KEY=          # Claude API キー
+AWS_PROFILE=                # AWS プロファイル名 (ローカル開発用)
+AWS_REGION=                 # Bedrock リージョン (us-east-1)
 DATABASE_URL=               # PostgreSQL 接続文字列
 AUTH_SECRET=                # NextAuth シークレット
 

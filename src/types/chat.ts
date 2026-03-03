@@ -12,7 +12,7 @@ export interface ClaudeModelConfig {
   id: ClaudeModel;
   name: string;
   description: string;
-  modelId: string; // Anthropic API model ID
+  modelId: string; // Bedrock model ID
   icon: string;
   tier: "premium" | "standard" | "economy";
   tokensPerMinute?: number;
@@ -23,7 +23,7 @@ export const CLAUDE_MODELS: ClaudeModelConfig[] = [
     id: "opus",
     name: "Claude Opus",
     description: "最高性能・複雑な推論に最適",
-    modelId: "claude-opus-4-20250514",
+    modelId: "anthropic.claude-opus-4-6-v1",
     icon: "auto_awesome",
     tier: "premium",
   },
@@ -31,7 +31,7 @@ export const CLAUDE_MODELS: ClaudeModelConfig[] = [
     id: "sonnet",
     name: "Claude Sonnet",
     description: "バランス型・コーディングに最適",
-    modelId: "claude-sonnet-4-20250514",
+    modelId: "anthropic.claude-sonnet-4-6",
     icon: "balance",
     tier: "standard",
   },
@@ -39,7 +39,7 @@ export const CLAUDE_MODELS: ClaudeModelConfig[] = [
     id: "haiku",
     name: "Claude Haiku",
     description: "高速・軽量タスクに最適",
-    modelId: "claude-haiku-4-20250514",
+    modelId: "anthropic.claude-haiku-4-5-20251001-v1:0",
     icon: "bolt",
     tier: "economy",
   },
