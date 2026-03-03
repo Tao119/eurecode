@@ -151,12 +151,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 対象ユーザーが組織に所属しているか確認（メンバーまたは管理者自身）
+    // 対象ユーザーが組織に所属しているか確認（メンバー、管理者、またはオーナー自身）
     const targetUser = await prisma.user.findFirst({
       where: {
         id: memberId,
         organizationId: admin.organizationId,
-        userType: { in: ["member", "admin"] },
+        userType: { in: ["member", "admin", "owner"] },
       },
     });
 
