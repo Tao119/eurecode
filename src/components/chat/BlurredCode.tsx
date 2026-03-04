@@ -18,6 +18,8 @@ interface BlurredCodeProps {
   canCopy?: boolean;
   showExplainButton?: boolean;
   onExplainCode?: () => void;
+  /** ストリーミング中はスケルトン表示 */
+  isStreaming?: boolean;
 }
 
 // 行の重要度を分類
@@ -126,8 +128,17 @@ export function BlurredCode({
   canCopy = false,
   showExplainButton = false,
   onExplainCode,
+  isStreaming = false,
 }: BlurredCodeProps) {
   const [copied, setCopied] = useState(false);
+
+  // Stable skeleton widths to avoid re-render flicker from Math.random()
+  const skeletonWidths = useMemo(
+    () => Array.from({ length: 12 }, (_, i) =>
+      Math.max(20, Math.min(90, 30 + Math.sin(i * 1.5) * 40 + Math.random() * 20))
+    ),
+    []
+  );
 
   const handleCopy = useCallback(async () => {
     if (!canCopy) return;
@@ -245,68 +256,92 @@ export function BlurredCode({
       )}
 
       {/* コード表示エリア */}
-      <div className="relative font-mono text-sm overflow-x-auto">
-        <div className="p-4 min-w-fit">
-          {analyzedLines.map((line, index) => {
-            const isVisible = visibleIndices.includes(index);
-            const lineNumber = index + 1;
-
-            return (
+      {isStreaming ? (
+        /* ストリーミング中: スケルトンローダー */
+        <div className="relative font-mono text-sm p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="size-5 rounded-full border-2 border-yellow-500/50 border-t-yellow-400 animate-spin" />
+            <span className="text-sm text-yellow-400/80">コード生成中...</span>
+          </div>
+          {Array.from({ length: 12 }, (_, i) => (
+            <div key={i} className="flex items-center mb-1">
+              <span className="w-10 flex-shrink-0 pr-4 text-right text-muted-foreground/20 select-none">
+                {i + 1}
+              </span>
               <div
-                key={index}
-                className={cn(
-                  "flex transition-all duration-300 whitespace-pre",
-                  !isVisible && "relative"
-                )}
-              >
-                {/* 行番号 */}
-                <span
+                className="h-4 rounded bg-zinc-700/40 animate-pulse"
+                style={{
+                  width: `${skeletonWidths[i]}%`,
+                  animationDelay: `${i * 80}ms`,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="relative font-mono text-sm overflow-x-auto">
+          <div className="p-4 min-w-fit">
+            {analyzedLines.map((line, index) => {
+              const isVisible = visibleIndices.includes(index);
+              const lineNumber = index + 1;
+
+              return (
+                <div
+                  key={index}
                   className={cn(
-                    "w-10 flex-shrink-0 pr-4 text-right select-none",
-                    isVisible ? "text-muted-foreground/60" : "text-muted-foreground/30"
+                    "flex transition-all duration-300 whitespace-pre",
+                    !isVisible && "relative"
                   )}
                 >
-                  {lineNumber}
-                </span>
-
-                {/* コード内容 */}
-                {isVisible ? (
-                  <SyntaxHighlighter
-                    style={oneDark}
-                    language={language}
-                    PreTag="span"
-                    customStyle={{
-                      display: "inline",
-                      background: "transparent",
-                      padding: 0,
-                      margin: 0,
-                      whiteSpace: "pre",
-                    }}
-                    codeTagProps={{
-                      style: {
-                        fontFamily: "inherit",
-                        whiteSpace: "pre",
-                      },
-                    }}
+                  {/* 行番号 */}
+                  <span
+                    className={cn(
+                      "w-10 flex-shrink-0 pr-4 text-right select-none",
+                      isVisible ? "text-muted-foreground/60" : "text-muted-foreground/30"
+                    )}
                   >
-                    {line.content || " "}
-                  </SyntaxHighlighter>
-                ) : (
-                  <span className="flex-1 relative whitespace-pre">
-                    {/* プレースホルダー（ぼかし） */}
-                    <span
-                      className="blur-[6px] select-none pointer-events-none text-muted-foreground/40"
-                      style={{ userSelect: "none" }}
-                    >
-                      {line.content.replace(/\S/g, "█") || " "}
-                    </span>
+                    {lineNumber}
                   </span>
-                )}
-              </div>
-            );
-          })}
+
+                  {/* コード内容 */}
+                  {isVisible ? (
+                    <SyntaxHighlighter
+                      style={oneDark}
+                      language={language}
+                      PreTag="span"
+                      customStyle={{
+                        display: "inline",
+                        background: "transparent",
+                        padding: 0,
+                        margin: 0,
+                        whiteSpace: "pre",
+                      }}
+                      codeTagProps={{
+                        style: {
+                          fontFamily: "inherit",
+                          whiteSpace: "pre",
+                        },
+                      }}
+                    >
+                      {line.content || " "}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <span className="flex-1 relative whitespace-pre">
+                      {/* プレースホルダー（ぼかし） */}
+                      <span
+                        className="blur-[6px] select-none pointer-events-none text-muted-foreground/40"
+                        style={{ userSelect: "none" }}
+                      >
+                        {line.content.replace(/\S/g, "█") || " "}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* フッター（アンロック完了時） */}
       {canCopy && (

@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, use, useCallback } from "react";
+import { useEffect, use, useCallback, useMemo } from "react";
 import { ExplanationChatContainer } from "@/components/chat/ExplanationChatContainer";
 import { useChat } from "@/hooks/useChat";
 import { useCredits } from "@/hooks/useCredits";
 import { toast } from "sonner";
+import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
+
+// 拡張されたConversationMetadata型（generationStateを含む）
+interface ExtendedConversationMetadata {
+  generationState?: PersistedArtifactQuizState;
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -44,6 +50,7 @@ export default function ExplanationRoomPage({ params }: PageProps) {
     canRegenerate,
     generationRecovery,
     clearGenerationRecovery,
+    restoredMetadata,
   } = useChat({
     mode: "explanation",
     conversationId,
@@ -80,6 +87,12 @@ export default function ExplanationRoomPage({ params }: PageProps) {
     }
   }, [generationRecovery, clearGenerationRecovery]);
 
+  // 会話metadataからアーティファクトクイズ状態を取得
+  const initialArtifactQuizState = useMemo(() => {
+    const extendedMetadata = restoredMetadata as ExtendedConversationMetadata | null;
+    return extendedMetadata?.generationState || undefined;
+  }, [restoredMetadata]);
+
   return (
     <ExplanationChatContainer
       messages={messages}
@@ -95,6 +108,7 @@ export default function ExplanationRoomPage({ params }: PageProps) {
       onRegenerate={regenerateLastMessage}
       canRegenerate={false}
       conversationId={conversationId}
+      initialArtifactQuizState={initialArtifactQuizState}
     />
   );
 }

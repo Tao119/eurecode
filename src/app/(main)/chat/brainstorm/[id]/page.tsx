@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect, use, useCallback } from "react";
+import { useState, useEffect, use, useCallback, useMemo } from "react";
 import { BrainstormChatContainer } from "@/components/chat/BrainstormChatContainer";
 import { useChat } from "@/hooks/useChat";
 import { useCredits } from "@/hooks/useCredits";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
+import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
+
+// 拡張されたConversationMetadata型（generationStateを含む）
+interface ExtendedConversationMetadata {
+  generationState?: PersistedArtifactQuizState;
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -93,6 +99,12 @@ export default function BrainstormRoomPage({ params }: PageProps) {
     }
   }, [generationRecovery, clearGenerationRecovery]);
 
+  // 会話metadataからアーティファクトクイズ状態を取得
+  const initialArtifactQuizState = useMemo(() => {
+    const extendedMetadata = restoredMetadata as ExtendedConversationMetadata | null;
+    return extendedMetadata?.generationState || undefined;
+  }, [restoredMetadata]);
+
   return (
     <BrainstormChatContainer
       messages={messages}
@@ -111,6 +123,7 @@ export default function BrainstormRoomPage({ params }: PageProps) {
       restoredMetadata={restoredMetadata}
       onMetadataChange={handleMetadataChange}
       onSubModeChange={setSubMode}
+      initialArtifactQuizState={initialArtifactQuizState}
     />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { BrainstormChatContainer, ModelSelector } from "@/components/chat";
 import { ProjectSelector } from "@/components/chat/ProjectSelector";
@@ -13,6 +13,12 @@ import { useCredits } from "@/hooks/useCredits";
 import { useGoal } from "@/hooks/useGoal";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
+import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
+
+// 拡張されたConversationMetadata型（generationStateを含む）
+interface ExtendedConversationMetadata {
+  generationState?: PersistedArtifactQuizState;
+}
 
 export default function BrainstormModePage() {
   const searchParams = useSearchParams();
@@ -85,6 +91,12 @@ export default function BrainstormModePage() {
 
   // Disable project change once conversation has started
   const canChangeProject = messages.length === 0 && !currentConversationId;
+
+  // 会話metadataからアーティファクトクイズ状態を取得
+  const initialArtifactQuizState = useMemo(() => {
+    const extendedMetadata = restoredMetadata as ExtendedConversationMetadata | null;
+    return extendedMetadata?.generationState || undefined;
+  }, [restoredMetadata]);
 
   // Handle metadata changes from BrainstormChatContainer
   const handleMetadataChange = useCallback(
@@ -186,6 +198,7 @@ export default function BrainstormModePage() {
         restoredMetadata={restoredMetadata}
         onMetadataChange={handleMetadataChange}
         onSubModeChange={setSubMode}
+        initialArtifactQuizState={initialArtifactQuizState}
         goal={goal}
         onGoalEdit={() => setShowGoalModal(true)}
         onGoalClear={clearGoal}

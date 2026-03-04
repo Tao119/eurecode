@@ -192,6 +192,9 @@ export function GenerationChatContainer({
     return hasTruncatedArtifact;
   }, [messages]);
 
+  // Detect streaming artifacts (truncated = still being generated)
+  const isActiveArtifactStreaming = isLoading && (state.activeArtifactId?.endsWith("-truncated") ?? false);
+
   // Check if user asked for more explanation after answering a quiz
   // This is true when:
   // 1. There's a next quiz available (state.currentQuiz)
@@ -1043,6 +1046,7 @@ export function GenerationChatContainer({
             activeArtifactProgress={activeArtifactProgress}
             setActiveArtifact={setActiveArtifact}
             onExplainCode={handleExplainCode}
+            isStreaming={isActiveArtifactStreaming}
           />
         )}
 
@@ -1165,6 +1169,7 @@ export function GenerationChatContainer({
                   canCopy={activeArtifactProgress.canCopy}
                   showExplainButton={true}
                   onExplainCode={handleExplainCode}
+                  isStreaming={isActiveArtifactStreaming}
                 />
               )}
             </div>
@@ -1354,6 +1359,7 @@ function MobileCodeSheet({
   activeArtifactProgress,
   setActiveArtifact,
   onExplainCode,
+  isStreaming = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -1374,6 +1380,7 @@ function MobileCodeSheet({
   };
   setActiveArtifact: (id: string) => void;
   onExplainCode: () => void;
+  isStreaming?: boolean;
 }) {
   if (!isOpen) return null;
 
@@ -1482,6 +1489,7 @@ function MobileCodeSheet({
               canCopy={activeArtifactProgress.canCopy}
               showExplainButton={true}
               onExplainCode={onExplainCode}
+              isStreaming={isStreaming}
             />
           )}
         </div>

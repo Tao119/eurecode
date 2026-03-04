@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
 import { BrainstormPhaseIndicator } from "./BrainstormPhaseIndicator";
 import { PlanStepList, SuggestedPlan } from "./PlanStepList";
+import { ArtifactCodePanel, MobileArtifactSheet, MobileCodeFAB } from "./ArtifactCodePanel";
+import { GenerationQuiz } from "./GenerationQuiz";
 import { ProjectSaveModal } from "@/components/projects/ProjectSaveModal";
 import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
@@ -17,6 +19,12 @@ import {
   PHASE_INFO,
   getPhaseCompletionCriteria,
 } from "@/hooks/useBrainstormMode";
+import {
+  useArtifactQuiz,
+  type PersistedArtifactQuizState,
+} from "@/hooks/useArtifactQuiz";
+import { parseArtifacts } from "@/lib/artifacts";
+import { removeIncompleteStreamingTags, removeQuizMarkerFromContent } from "@/lib/quiz-generator";
 import { MODE_CONFIG, MODE_ICON_SIZES } from "@/config/modes";
 import type { Message, ConversationBranch, PlanStep, BrainstormPhase, BrainstormSubMode, BrainstormModeState, ConversationMetadata, FileAttachment, LearnerGoal } from "@/types/chat";
 import { BRAINSTORM_SUB_MODES } from "@/types/chat";
@@ -51,6 +59,8 @@ interface BrainstormChatContainerProps {
   goal?: LearnerGoal | null;
   onGoalEdit?: () => void;
   onGoalClear?: () => void;
+  // Artifact quiz initial state (from conversation metadata)
+  initialArtifactQuizState?: PersistedArtifactQuizState;
 }
 
 // AIレスポンスから適切なフェーズを検出（会話内容から判断）
@@ -253,13 +263,188 @@ export function BrainstormChatContainer({
   subMode: externalSubMode,
   onSubModeChange,
   headerExtra,
+  initialArtifactQuizState,
 }: BrainstormChatContainerProps) {
   const { containerRef, endRef } = useAutoScroll(messages);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [isCodePanelCollapsed, setIsCodePanelCollapsed] = useState(false);
+  const [isMobileArtifactSheetOpen, setIsMobileArtifactSheetOpen] = useState(false);
   const hasBranches = branches.length > 1;
   const currentBranch = branches.find((b) => b.id === currentBranchId);
   const [hasRestoredState, setHasRestoredState] = useState(false);
+
+  // --- Artifact/Quiz system ---
+  const artQuiz = useArtifactQuiz({
+    conversationId,
+    initialState: initialArtifactQuizState,
+    skipAllowed: false,
+    hintSpeed: "30sec",
+  });
+
+  const artifactsList = useMemo(() => Object.values(artQuiz.state.artifacts), [artQuiz.state.artifacts]);
+  const hasArtifacts = artifactsList.length > 0;
+
+  const savedArtifactIdsRef = useRef<Set<string>>(new Set());
+  const artInitializedRef = useRef(false);
+  const artPrevMessagesLengthRef = useRef(0);
+  const artLastProcessedContentRef = useRef<string>("");
+  const artQuizGeneratedRef = useRef<Set<string>>(new Set());
+  const artStreamingRef = useRef<Set<string>>(new Set());
+
+  // Mark initial state artifacts as saved
+  useEffect(() => {
+    if (initialArtifactQuizState?.artifacts) {
+      for (const artifactId of Object.keys(initialArtifactQuizState.artifacts)) {
+        savedArtifactIdsRef.current.add(artifactId);
+      }
+    }
+  }, [initialArtifactQuizState]);
+
+  // Per-artifact progress
+  const activeArtifactProgress = useMemo(() => {
+    const progress = artQuiz.state.activeArtifactId
+      ? artQuiz.state.artifactProgress[artQuiz.state.activeArtifactId]
+      : null;
+    const total = progress?.totalQuestions ?? artQuiz.state.totalQuestions;
+    const level = progress?.unlockLevel ?? artQuiz.state.unlockLevel;
+    const isUnlocked = total === 0 || level >= total;
+    const quizHistory = progress?.quizHistory ?? artQuiz.state.quizHistory ?? [];
+    return {
+      unlockLevel: level,
+      totalQuestions: total,
+      progressPercentage: total === 0 ? 100 : (level / total) * 100,
+      canCopy: isUnlocked,
+      isUnlocked,
+      quizHistory,
+    };
+  }, [
+    artQuiz.state.activeArtifactId,
+    artQuiz.state.artifactProgress,
+    artQuiz.state.totalQuestions,
+    artQuiz.state.unlockLevel,
+    artQuiz.state.quizHistory,
+  ]);
+
+  // Unlock message index
+  const unlockedAtMessageIndex = useMemo(() => {
+    if (!activeArtifactProgress.isUnlocked) return -1;
+    if (activeArtifactProgress.quizHistory.length === 0) return -1;
+    const lastQuiz = activeArtifactProgress.quizHistory.reduce((max, item) => {
+      const count = item.answeredAtMessageCount ?? 0;
+      return count > (max?.answeredAtMessageCount ?? 0) ? item : max;
+    }, activeArtifactProgress.quizHistory[0]);
+    return lastQuiz?.answeredAtMessageCount ? lastQuiz.answeredAtMessageCount - 1 : -1;
+  }, [activeArtifactProgress.isUnlocked, activeArtifactProgress.quizHistory]);
+
+  // Detect streaming artifacts (truncated = still being generated)
+  const isActiveArtifactStreaming = isLoading && (artQuiz.activeArtifact?.id?.endsWith("-truncated") ?? false);
+
+  // Artifact detection: initial load
+  useEffect(() => {
+    if (artInitializedRef.current || messages.length === 0) return;
+    artInitializedRef.current = true;
+    artPrevMessagesLengthRef.current = messages.length;
+
+    for (const message of messages) {
+      if (message.role === "assistant") {
+        const { artifacts } = parseArtifacts(message.content);
+        for (const artifact of artifacts) {
+          artQuiz.addOrUpdateArtifact(artifact);
+        }
+      }
+    }
+  }, [messages, artQuiz.addOrUpdateArtifact]);
+
+  // Artifact detection: streaming
+  useEffect(() => {
+    if (!isLoading || !artInitializedRef.current || messages.length === 0) {
+      if (!isLoading) artStreamingRef.current.clear();
+      return;
+    }
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    const { artifacts } = parseArtifacts(lastMessage.content);
+    for (const artifact of artifacts) {
+      if (!artStreamingRef.current.has(artifact.id)) {
+        artStreamingRef.current.add(artifact.id);
+        artQuiz.addOrUpdateArtifact(artifact);
+      }
+    }
+  }, [isLoading, messages, artQuiz.addOrUpdateArtifact]);
+
+  // Post-streaming artifact + quiz generation
+  useEffect(() => {
+    if (!artInitializedRef.current || messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    const content = lastMessage.content;
+    const isNewMessage = messages.length > artPrevMessagesLengthRef.current;
+    const isStreamingComplete = !isLoading && artLastProcessedContentRef.current !== `art:${content}`;
+
+    if (!isNewMessage && !isStreamingComplete) return;
+
+    artPrevMessagesLengthRef.current = messages.length;
+    artLastProcessedContentRef.current = `art:${content}`;
+
+    const { artifacts } = parseArtifacts(content);
+    for (const artifact of artifacts) {
+      const shouldGenerateQuiz = !isLoading && !artQuizGeneratedRef.current.has(artifact.id);
+
+      if (shouldGenerateQuiz) {
+        artQuizGeneratedRef.current.add(artifact.id);
+        artQuiz.addOrUpdateArtifact(artifact).then((savedId) => {
+          if (savedId) {
+            savedArtifactIdsRef.current.add(savedId);
+            artQuiz.generateQuizzesForArtifact(savedId).catch((error) => {
+              console.error("[BrainstormChatContainer] Quiz generation failed:", error);
+            });
+          }
+        });
+      } else {
+        artQuiz.addOrUpdateArtifact(artifact).then((savedId) => {
+          if (savedId) savedArtifactIdsRef.current.add(savedId);
+        });
+      }
+    }
+  }, [messages, isLoading, artQuiz.addOrUpdateArtifact, artQuiz.generateQuizzesForArtifact]);
+
+  // Load quizzes when artifact selected
+  useEffect(() => {
+    const artifactId = artQuiz.state.activeArtifactId;
+    if (!artifactId || artQuiz.state.currentQuiz) return;
+    if (!savedArtifactIdsRef.current.has(artifactId)) return;
+
+    artQuiz.loadQuizzesFromAPI(artifactId).catch((error) => {
+      if (error?.code === "NOT_FOUND") return;
+      console.error("[BrainstormChatContainer] Failed to load quizzes:", error);
+    });
+  }, [artQuiz.state.activeArtifactId, artQuiz.state.currentQuiz, artQuiz.loadQuizzesFromAPI]);
+
+  // Quiz answer handler
+  const handleQuizAnswer = useCallback(
+    async (answer: string) => {
+      const quizId = (artQuiz.state.currentQuiz as { id?: string })?.id;
+      const artifactId = artQuiz.state.activeArtifactId;
+      if (quizId && artifactId) {
+        await artQuiz.answerQuizAPI(artifactId, quizId, answer, messages.length);
+      }
+    },
+    [artQuiz.state.currentQuiz, artQuiz.state.activeArtifactId, artQuiz.answerQuizAPI, messages.length]
+  );
+
+  // Process content to hide artifact tags
+  const getProcessedContent = useCallback((content: string, isStreaming: boolean = false) => {
+    let processed = content;
+    if (isStreaming) {
+      processed = removeIncompleteStreamingTags(processed);
+    }
+    processed = removeQuizMarkerFromContent(processed);
+    const { contentWithoutArtifacts } = parseArtifacts(processed);
+    return contentWithoutArtifacts;
+  }, []);
 
   // Scroll to target message from learning detail page
   useEffect(() => {
@@ -514,6 +699,39 @@ export function BrainstormChatContainer({
                 {headerExtra}
               </div>
 
+              {/* Artifact progress indicator */}
+              {hasArtifacts && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                      style={{ width: `${artQuiz.progressPercentage}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] sm:text-xs font-medium text-purple-400">
+                    {Math.round(artQuiz.progressPercentage)}%
+                  </div>
+                </div>
+              )}
+
+              {/* Code Panel Toggle - Desktop only */}
+              {hasArtifacts && (
+                <button
+                  onClick={() => setIsCodePanelCollapsed(!isCodePanelCollapsed)}
+                  className={cn(
+                    "hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors text-sm",
+                    isCodePanelCollapsed
+                      ? "border-purple-500/50 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
+                      : "border-border bg-card hover:bg-muted/50"
+                  )}
+                >
+                  <span className="material-symbols-outlined text-base">
+                    {isCodePanelCollapsed ? "dock_to_left" : "dock_to_right"}
+                  </span>
+                  <span>{isCodePanelCollapsed ? "コードを表示" : "コードを非表示"}</span>
+                </button>
+              )}
+
               {/* Summary Button */}
               {messages.length > 0 && (
                 <Button
@@ -656,99 +874,310 @@ export function BrainstormChatContainer({
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto min-h-0">
-        {messages.length === 0 ? (
-          <WelcomeScreen
-            welcomeMessage={welcomeMessage || BRAINSTORM_INITIAL_MESSAGES[state.subMode]}
-            currentPhaseInfo={currentPhaseInfo}
-            onQuickReply={handleQuickReply}
-            subMode={state.subMode}
-          />
-        ) : (
-          <div className="mx-auto max-w-4xl pb-4">
-            {messages.map((message, index) => {
-              // Find if this is the last assistant message
-              const isLastAssistantMessage =
-                message.role === "assistant" &&
-                !messages.slice(index + 1).some((m) => m.role === "assistant");
-
-              return (
-              <div key={message.id || index} id={`msg-${index}`}>
-                <ChatMessage
-                  message={message}
-                  isStreaming={isLoading && index === messages.length - 1 && message.role === "assistant"}
-                  onOptionSelect={!isLoading && isLastAssistantMessage ? onSendMessage : undefined}
-                  onFork={onForkFromMessage ? () => onForkFromMessage(index) : undefined}
-                  showForkButton={!isLoading && index < messages.length - 1}
-                  onRegenerate={onRegenerate}
-                  showRegenerateButton={!isLoading && isLastAssistantMessage && canRegenerate}
-                  conversationId={conversationId}
-                />
-              </div>
-              );
-            })}
-
-            {/* Transition Suggestion UI */}
-            {state.transitionSuggestion.isVisible && state.transitionSuggestion.targetPhase && (
-              <div className="px-4 py-3">
-                <TransitionSuggestionUI
-                  currentPhase={state.currentPhase}
-                  targetPhase={state.transitionSuggestion.targetPhase}
-                  reason={state.transitionSuggestion.reason}
-                  completionScore={state.phaseProgress[state.currentPhase].completionScore}
-                  onAccept={handleAcceptTransition}
-                  onDismiss={handleDismissTransition}
-                />
-              </div>
-            )}
-
-            {/* Suggested Plan */}
-            {suggestedSteps.length > 0 && (
-              <div className="px-4 py-4">
-                <SuggestedPlan
-                  steps={suggestedSteps}
-                  onAccept={handleAcceptPlan}
-                  onModify={handleModifyPlan}
-                  onSimplify={handleSimplifyPlan}
-                />
-              </div>
-            )}
-
-            {/* Plan Steps (after accepted) */}
-            {state.planSteps.length > 0 && (
-              <div className="px-4 py-4">
-                <PlanStepList
-                  steps={state.planSteps}
-                  onStepsChange={setPlanSteps}
-                  editable
-                />
-              </div>
-            )}
-
-            {/* Brainstorm Completion UI */}
-            {state.isCompleted && (
-              <BrainstormCompletionUI
-                brainstormState={state}
-                onSaveAsProject={() => setShowSaveModal(true)}
-                onShowSummary={handleShowSummary}
-                onStartNew={handleStartNewBrainstorm}
+      {/* Main Content - Split View when artifacts exist */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        {/* Left Panel - Chat */}
+        <div className={cn(
+          "flex flex-col min-h-0 transition-all duration-300 w-full",
+          hasArtifacts && !isCodePanelCollapsed && "md:w-1/2"
+        )}>
+          {/* Messages */}
+          <div ref={containerRef} className="flex-1 overflow-y-auto min-h-0">
+            {messages.length === 0 ? (
+              <WelcomeScreen
+                welcomeMessage={welcomeMessage || BRAINSTORM_INITIAL_MESSAGES[state.subMode]}
+                currentPhaseInfo={currentPhaseInfo}
+                onQuickReply={handleQuickReply}
+                subMode={state.subMode}
               />
+            ) : (
+              <div className="mx-auto max-w-4xl pb-4">
+                {messages.map((message, index) => {
+                  const isLastAssistantMessage =
+                    message.role === "assistant" &&
+                    !messages.slice(index + 1).some((m) => m.role === "assistant");
+
+                  const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
+
+                  // Check for artifacts in this message
+                  const containsArtifact = message.role === "assistant" &&
+                    message.content.includes("<!--ARTIFACT:");
+                  const isLastArtifactMessage = containsArtifact &&
+                    !messages.slice(index + 1).some((m) =>
+                      m.role === "assistant" && m.content.includes("<!--ARTIFACT:")
+                    );
+
+                  // Process message (hide artifact tags)
+                  const processedMessage = message.role === "assistant"
+                    ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
+                    : message;
+
+                  // Completed quizzes after this message
+                  const completedQuizzesAfterThis = activeArtifactProgress.quizHistory.filter(
+                    (item) => item.answeredAtMessageCount === index + 1 && item.isCorrect && item.completedQuiz
+                  );
+
+                  // Should show current quiz here
+                  const shouldShowCurrentQuizHere = isLastArtifactMessage &&
+                    !activeArtifactProgress.isUnlocked;
+
+                  return (
+                    <div key={message.id || index} id={`msg-${index}`}>
+                      <ChatMessage
+                        message={processedMessage}
+                        isStreaming={isMessageStreaming}
+                        onOptionSelect={!isLoading && isLastAssistantMessage ? onSendMessage : undefined}
+                        onFork={onForkFromMessage ? () => onForkFromMessage(index) : undefined}
+                        showForkButton={!isLoading && index < messages.length - 1}
+                        onRegenerate={onRegenerate}
+                        showRegenerateButton={!isLoading && isLastAssistantMessage && canRegenerate}
+                        conversationId={conversationId}
+                      />
+
+                      {/* Completed quizzes inline */}
+                      {completedQuizzesAfterThis.map((quizItem, quizIndex) => (
+                        <div key={`completed-quiz-${index}-${quizIndex}`} className="px-4 py-4">
+                          <GenerationQuiz
+                            quiz={quizItem.completedQuiz!}
+                            onAnswer={() => {}}
+                            hintVisible={false}
+                            completedAnswer={quizItem.userAnswer}
+                            defaultCollapsed={false}
+                            isCollapsible={true}
+                            onAskForMoreExplanation={(quiz, userAnswer) => {
+                              const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
+                              const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
+
+                              let msg = `【システム生成クイズについての質問】\n\n`;
+                              msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
+                              msg += `【質問】\n${quiz.question}\n\n`;
+                              msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
+                              if (correctOption?.explanation) {
+                                msg += `解説: ${correctOption.explanation}\n`;
+                              }
+                              if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
+                                msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
+                                msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
+                              } else {
+                                msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
+                              }
+                              onSendMessage(msg);
+                            }}
+                          />
+                        </div>
+                      ))}
+
+                      {/* Unlock complete notification */}
+                      {activeArtifactProgress.isUnlocked &&
+                        index === unlockedAtMessageIndex &&
+                        activeArtifactProgress.quizHistory.length > 0 && (
+                        <div className="px-4 py-4">
+                          <div className="rounded-lg border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="size-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-green-400 text-2xl">emoji_events</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-bold text-lg text-green-400">クイズ完了！</p>
+                                <p className="text-sm text-foreground/80">
+                                  {activeArtifactProgress.quizHistory.length}問全て正解しました。コードをコピーできます。
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 text-green-400 bg-green-500/20 px-3 py-1.5 rounded-full">
+                                <span className="material-symbols-outlined text-lg">lock_open</span>
+                                <span className="text-sm font-medium">アンロック</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Current quiz after artifact message */}
+                      {shouldShowCurrentQuizHere && (
+                        artQuiz.state.currentQuiz ? (
+                          <div id="current-quiz-block" className="px-4 py-4">
+                            <GenerationQuiz
+                              quiz={artQuiz.state.currentQuiz}
+                              onAnswer={handleQuizAnswer}
+                              hintVisible={artQuiz.state.hintVisible}
+                              isCollapsible={true}
+                              onAskAboutQuestion={(question, opts) => {
+                                const optionsList = opts.join("\n");
+                                onSendMessage(
+                                  `このクイズについて教えてください：\n\n質問: ${question}\n\n選択肢:\n${optionsList}\n\n正解を教えずに、この問題を解くためのヒントや考え方を教えてください。`
+                                );
+                              }}
+                              onAskForMoreExplanation={(quiz, userAnswer) => {
+                                const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
+                                const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
+
+                                let msg = `【システム生成クイズについての質問】\n\n`;
+                                msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
+                                msg += `【質問】\n${quiz.question}\n\n`;
+                                msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
+                                if (correctOption?.explanation) {
+                                  msg += `解説: ${correctOption.explanation}\n`;
+                                }
+                                if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
+                                  msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
+                                  msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
+                                } else {
+                                  msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
+                                }
+                                onSendMessage(msg);
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          artQuiz.activeArtifact && !isLoading && (
+                            <div className="px-4 py-4">
+                              <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-purple-400">quiz</span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-foreground/90">
+                                      クイズを読み込んでいます...
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      クイズに回答してコードをアンロックしましょう
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (artQuiz.activeArtifact?.id) {
+                                        artQuiz.generateQuizzesForArtifact(artQuiz.activeArtifact.id).catch((error) => {
+                                          console.error("[BrainstormChatContainer] Quiz regeneration failed:", error);
+                                        });
+                                      }
+                                    }}
+                                    className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+                                  >
+                                    <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
+                                    クイズを再生成
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Transition Suggestion UI */}
+                {state.transitionSuggestion.isVisible && state.transitionSuggestion.targetPhase && (
+                  <div className="px-4 py-3">
+                    <TransitionSuggestionUI
+                      currentPhase={state.currentPhase}
+                      targetPhase={state.transitionSuggestion.targetPhase}
+                      reason={state.transitionSuggestion.reason}
+                      completionScore={state.phaseProgress[state.currentPhase].completionScore}
+                      onAccept={handleAcceptTransition}
+                      onDismiss={handleDismissTransition}
+                    />
+                  </div>
+                )}
+
+                {/* Suggested Plan */}
+                {suggestedSteps.length > 0 && (
+                  <div className="px-4 py-4">
+                    <SuggestedPlan
+                      steps={suggestedSteps}
+                      onAccept={handleAcceptPlan}
+                      onModify={handleModifyPlan}
+                      onSimplify={handleSimplifyPlan}
+                    />
+                  </div>
+                )}
+
+                {/* Plan Steps (after accepted) */}
+                {state.planSteps.length > 0 && (
+                  <div className="px-4 py-4">
+                    <PlanStepList
+                      steps={state.planSteps}
+                      onStepsChange={setPlanSteps}
+                      editable
+                    />
+                  </div>
+                )}
+
+                {/* Brainstorm Completion UI */}
+                {state.isCompleted && (
+                  <BrainstormCompletionUI
+                    brainstormState={state}
+                    onSaveAsProject={() => setShowSaveModal(true)}
+                    onShowSummary={handleShowSummary}
+                    onStartNew={handleStartNewBrainstorm}
+                  />
+                )}
+
+                <div ref={endRef} />
+              </div>
             )}
-
-            <div ref={endRef} />
           </div>
-        )}
-      </div>
 
-      {/* Input */}
-      <div className="shrink-0">
-        <ChatInput
-          onSend={onSendMessage}
-          onStop={onStopGeneration}
-          isLoading={isLoading}
-          placeholder={inputPlaceholder || currentPhaseInfo.questions[0]}
-        />
+          {/* Input */}
+          <div className="shrink-0">
+            <ChatInput
+              onSend={onSendMessage}
+              onStop={onStopGeneration}
+              isLoading={isLoading}
+              placeholder={inputPlaceholder || currentPhaseInfo.questions[0]}
+            />
+          </div>
+        </div>
+
+        {/* Mobile FAB - Artifact Code */}
+        {hasArtifacts && (
+          <MobileCodeFAB
+            onClick={() => setIsMobileArtifactSheetOpen(true)}
+            progressPercentage={artQuiz.progressPercentage}
+            themeColor="purple"
+          />
+        )}
+
+        {/* Mobile Artifact Bottom Sheet */}
+        {hasArtifacts && (
+          <MobileArtifactSheet
+            isOpen={isMobileArtifactSheetOpen}
+            onClose={() => setIsMobileArtifactSheetOpen(false)}
+            activeArtifact={artQuiz.activeArtifact}
+            artifacts={artifactsList}
+            activeArtifactId={artQuiz.state.activeArtifactId}
+            artifactProgress={artQuiz.state.artifactProgress}
+            unlockLevel={activeArtifactProgress.unlockLevel}
+            totalQuestions={activeArtifactProgress.totalQuestions}
+            progressPercentage={activeArtifactProgress.progressPercentage}
+            canCopy={activeArtifactProgress.canCopy}
+            onSelectArtifact={artQuiz.setActiveArtifact}
+            themeColor="purple"
+            isStreaming={isActiveArtifactStreaming}
+          />
+        )}
+
+        {/* Right Panel - Artifact Code (Desktop) */}
+        {hasArtifacts && !isCodePanelCollapsed && (
+          <ArtifactCodePanel
+            artifacts={artifactsList}
+            activeArtifact={artQuiz.activeArtifact}
+            activeArtifactId={artQuiz.state.activeArtifactId}
+            artifactProgress={artQuiz.state.artifactProgress}
+            unlockLevel={activeArtifactProgress.unlockLevel}
+            totalQuestions={activeArtifactProgress.totalQuestions}
+            progressPercentage={activeArtifactProgress.progressPercentage}
+            canCopy={activeArtifactProgress.canCopy}
+            onSelectArtifact={artQuiz.setActiveArtifact}
+            onCollapse={() => setIsCodePanelCollapsed(true)}
+            themeColor="purple"
+            panelTitle="生成されたコード"
+            isStreaming={isActiveArtifactStreaming}
+          />
+        )}
       </div>
 
       {/* Project Save Modal */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { ModelSelector } from "@/components/chat";
 import { ExplanationChatContainer } from "@/components/chat/ExplanationChatContainer";
@@ -13,6 +13,12 @@ import { useChat, ChatApiError } from "@/hooks/useChat";
 import { useCredits } from "@/hooks/useCredits";
 import { useGoal } from "@/hooks/useGoal";
 import { toast } from "sonner";
+import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
+
+// 拡張されたConversationMetadata型（generationStateを含む）
+interface ExtendedConversationMetadata {
+  generationState?: PersistedArtifactQuizState;
+}
 
 export default function ExplanationModePage() {
   const searchParams = useSearchParams();
@@ -129,6 +135,12 @@ export default function ExplanationModePage() {
   // Disable project change once conversation has started
   const canChangeProject = messages.length === 0 && !currentConversationId;
 
+  // 会話metadataからアーティファクトクイズ状態を取得
+  const initialArtifactQuizState = useMemo(() => {
+    const extendedMetadata = restoredMetadata as ExtendedConversationMetadata | null;
+    return extendedMetadata?.generationState || undefined;
+  }, [restoredMetadata]);
+
   // Load conversation from history if ID is provided (from URL on initial load)
   useEffect(() => {
     if (initialConversationId) {
@@ -217,6 +229,7 @@ export default function ExplanationModePage() {
         goal={goal}
         onGoalEdit={() => setShowGoalModal(true)}
         onGoalClear={clearGoal}
+        initialArtifactQuizState={initialArtifactQuizState}
         headerExtra={
           <>
             <GoalTrigger goal={goal} onClick={() => setShowGoalModal(true)} />

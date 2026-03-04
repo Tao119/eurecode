@@ -1,18 +1,29 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
 import { ExplanationCodePanel, MobileExplanationCodeSheet } from "./ExplanationCodePanel";
+import { ArtifactCodePanel, MobileArtifactSheet, MobileCodeFAB } from "./ArtifactCodePanel";
+import { GenerationQuiz } from "./GenerationQuiz";
+import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useExplanationMode } from "@/hooks/useExplanationMode";
+import {
+  useArtifactQuiz,
+  type PersistedArtifactQuizState,
+  type ArtifactProgress,
+} from "@/hooks/useArtifactQuiz";
 import { parseLineReferences, findFirstCodeBlockInMessages } from "@/lib/line-reference-parser";
 import { parseArtifacts } from "@/lib/artifacts";
-import { removeIncompleteStreamingTags } from "@/lib/quiz-generator";
+import { removeIncompleteStreamingTags, removeQuizMarkerFromContent } from "@/lib/quiz-generator";
 import { MODE_CONFIG } from "@/config/modes";
-import type { Message, ConversationBranch, FileAttachment, LearnerGoal } from "@/types/chat";
+import type { Message, ConversationBranch, Artifact, FileAttachment, LearnerGoal } from "@/types/chat";
 import { cn } from "@/lib/utils";
+
+// Panel view state for right panel
+type RightPanelView = "explanation" | "artifact";
 
 interface ExplanationChatContainerProps {
   messages: Message[];
@@ -37,6 +48,8 @@ interface ExplanationChatContainerProps {
   goal?: LearnerGoal | null;
   onGoalEdit?: () => void;
   onGoalClear?: () => void;
+  // Artifact quiz initial state (from conversation metadata)
+  initialArtifactQuizState?: PersistedArtifactQuizState;
 }
 
 export function ExplanationChatContainer({
@@ -54,15 +67,18 @@ export function ExplanationChatContainer({
   canRegenerate = false,
   headerExtra,
   conversationId,
+  initialArtifactQuizState,
 }: ExplanationChatContainerProps) {
   const { containerRef, endRef } = useAutoScroll(messages);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
   const [isCodePanelCollapsed, setIsCodePanelCollapsed] = useState(false);
   const [isMobileCodeSheetOpen, setIsMobileCodeSheetOpen] = useState(false);
+  const [isMobileArtifactSheetOpen, setIsMobileArtifactSheetOpen] = useState(false);
+  const [rightPanelView, setRightPanelView] = useState<RightPanelView>("explanation");
   const hasBranches = branches.length > 1;
   const currentBranch = branches.find((b) => b.id === currentBranchId);
 
-  // 解説モードの状態管理
+  // 解説モードの状態管理（ユーザーが貼り付けたコード用）
   const {
     state: codeState,
     setSourceCode,
@@ -74,16 +90,86 @@ export function ExplanationChatContainer({
     hasCode,
   } = useExplanationMode({ conversationId });
 
+  // アーティファクト・クイズ状態管理（AI生成コード用）
+  const artQuiz = useArtifactQuiz({
+    conversationId,
+    initialState: initialArtifactQuizState,
+    skipAllowed: false,
+    hintSpeed: "30sec",
+  });
+
+  const artifactsList = useMemo(() => Object.values(artQuiz.state.artifacts), [artQuiz.state.artifacts]);
+  const hasArtifacts = artifactsList.length > 0;
+
+  // Track saved artifact IDs
+  const savedArtifactIdsRef = useRef<Set<string>>(new Set());
+
+  // Mark initial state artifacts as saved
+  useEffect(() => {
+    if (initialArtifactQuizState?.artifacts) {
+      for (const artifactId of Object.keys(initialArtifactQuizState.artifacts)) {
+        savedArtifactIdsRef.current.add(artifactId);
+      }
+    }
+  }, [initialArtifactQuizState]);
+
+  // Per-artifact progress
+  const activeArtifactProgress = useMemo(() => {
+    const progress = artQuiz.state.activeArtifactId
+      ? artQuiz.state.artifactProgress[artQuiz.state.activeArtifactId]
+      : null;
+    const total = progress?.totalQuestions ?? artQuiz.state.totalQuestions;
+    const level = progress?.unlockLevel ?? artQuiz.state.unlockLevel;
+    const isUnlocked = total === 0 || level >= total;
+    const quizHistory = progress?.quizHistory ?? artQuiz.state.quizHistory ?? [];
+    return {
+      unlockLevel: level,
+      totalQuestions: total,
+      progressPercentage: total === 0 ? 100 : (level / total) * 100,
+      canCopy: isUnlocked,
+      isUnlocked,
+      quizHistory,
+    };
+  }, [
+    artQuiz.state.activeArtifactId,
+    artQuiz.state.artifactProgress,
+    artQuiz.state.totalQuestions,
+    artQuiz.state.unlockLevel,
+    artQuiz.state.quizHistory,
+  ]);
+
+  // Calculate unlock message index
+  const unlockedAtMessageIndex = useMemo(() => {
+    if (!activeArtifactProgress.isUnlocked) return -1;
+    if (activeArtifactProgress.quizHistory.length === 0) return -1;
+    const lastQuiz = activeArtifactProgress.quizHistory.reduce((max, item) => {
+      const count = item.answeredAtMessageCount ?? 0;
+      return count > (max?.answeredAtMessageCount ?? 0) ? item : max;
+    }, activeArtifactProgress.quizHistory[0]);
+    return lastQuiz?.answeredAtMessageCount ? lastQuiz.answeredAtMessageCount - 1 : -1;
+  }, [activeArtifactProgress.isUnlocked, activeArtifactProgress.quizHistory]);
+
+  // Detect streaming artifacts (truncated = still being generated)
+  const isActiveArtifactStreaming = isLoading && (artQuiz.activeArtifact?.id?.endsWith("-truncated") ?? false);
+
+  // Auto-switch to artifact panel when first artifact appears
+  useEffect(() => {
+    if (hasArtifacts && !hasCode) {
+      setRightPanelView("artifact");
+    }
+  }, [hasArtifacts, hasCode]);
+
   // 前回処理したメッセージ数を追跡
   const prevMessagesLengthRef = useRef(0);
-  const lastProcessedContentRef = useRef<string>("");
+  const lineRefProcessedContentRef = useRef<string>("");
+  const artProcessedContentRef = useRef<string>("");
+  const initializedRef = useRef(false);
+  const quizGeneratedRef = useRef<Set<string>>(new Set());
 
   // メッセージからコードを抽出（ユーザーが貼り付けたコード）
   useEffect(() => {
     if (messages.length === 0) return;
-    if (hasCode) return; // すでにコードがある場合はスキップ
-
-    // ユーザーメッセージから最初のコードブロックを検索
+    if (hasCode) return;
     const codeBlock = findFirstCodeBlockInMessages(messages);
     if (codeBlock) {
       setSourceCode(codeBlock.code, codeBlock.language, "user-paste");
@@ -92,22 +178,16 @@ export function ExplanationChatContainer({
 
   // AI応答から行参照を抽出してハイライト
   useEffect(() => {
-    if (isLoading) return; // ストリーミング中はスキップ
+    if (isLoading) return;
     if (messages.length === 0) return;
-
     const lastMessage = messages[messages.length - 1];
     if (lastMessage.role !== "assistant") return;
+    if (lineRefProcessedContentRef.current === lastMessage.content) return;
+    lineRefProcessedContentRef.current = lastMessage.content;
 
-    // 同じコンテンツは処理しない
-    if (lastProcessedContentRef.current === lastMessage.content) return;
-    lastProcessedContentRef.current = lastMessage.content;
-
-    // 行参照を抽出
     const refs = parseLineReferences(lastMessage.content);
     if (refs.allLines.length > 0) {
       setHighlightedLines(refs.allLines);
-
-      // ハイライトした範囲を解説済みとしてマーク
       if (refs.allLines.length > 0) {
         const min = Math.min(...refs.allLines);
         const max = Math.max(...refs.allLines);
@@ -124,12 +204,10 @@ export function ExplanationChatContainer({
     const target = sessionStorage.getItem("learning-scroll-target");
     if (!target) return;
     sessionStorage.removeItem("learning-scroll-target");
-
     const msgIndex = messages.findIndex(
       (m) => m.role === "assistant" && m.content === target
     );
     if (msgIndex === -1) return;
-
     requestAnimationFrame(() => {
       const el = document.getElementById(`msg-${msgIndex}`);
       if (el) {
@@ -142,6 +220,116 @@ export function ExplanationChatContainer({
     });
   }, [messages]);
 
+  // --- Artifact detection (initial load) ---
+  useEffect(() => {
+    if (initializedRef.current || messages.length === 0) return;
+    initializedRef.current = true;
+    prevMessagesLengthRef.current = messages.length;
+
+    for (const message of messages) {
+      if (message.role === "assistant") {
+        const { artifacts } = parseArtifacts(message.content);
+        for (const artifact of artifacts) {
+          artQuiz.addOrUpdateArtifact(artifact);
+        }
+      }
+    }
+  }, [messages, artQuiz.addOrUpdateArtifact]);
+
+  // --- Streaming artifact detection ---
+  const streamingArtifactRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isLoading || !initializedRef.current || messages.length === 0) {
+      if (!isLoading) {
+        streamingArtifactRef.current.clear();
+      }
+      return;
+    }
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    const { artifacts } = parseArtifacts(lastMessage.content);
+    if (artifacts.length > 0) {
+      for (const artifact of artifacts) {
+        if (!streamingArtifactRef.current.has(artifact.id)) {
+          streamingArtifactRef.current.add(artifact.id);
+          artQuiz.addOrUpdateArtifact(artifact);
+        }
+      }
+    }
+  }, [isLoading, messages, artQuiz.addOrUpdateArtifact]);
+
+  // --- Post-streaming artifact processing + quiz generation ---
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    if (messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    const content = lastMessage.content;
+    const isNewMessage = messages.length > prevMessagesLengthRef.current;
+    const isStreamingComplete = !isLoading && artProcessedContentRef.current !== content;
+
+    if (!isNewMessage && !isStreamingComplete) return;
+
+    prevMessagesLengthRef.current = messages.length;
+    if (artProcessedContentRef.current === content) return;
+    artProcessedContentRef.current = content;
+
+    const { artifacts } = parseArtifacts(content);
+    if (artifacts.length > 0) {
+      for (const artifact of artifacts) {
+        const shouldGenerateQuiz = !isLoading && !quizGeneratedRef.current.has(artifact.id);
+
+        if (shouldGenerateQuiz) {
+          quizGeneratedRef.current.add(artifact.id);
+          artQuiz.addOrUpdateArtifact(artifact).then((savedArtifactId) => {
+            if (savedArtifactId) {
+              savedArtifactIdsRef.current.add(savedArtifactId);
+              artQuiz.generateQuizzesForArtifact(savedArtifactId).catch((error) => {
+                console.error("[ExplanationChatContainer] Quiz generation failed:", error);
+              });
+            }
+          });
+        } else {
+          artQuiz.addOrUpdateArtifact(artifact).then((savedArtifactId) => {
+            if (savedArtifactId) {
+              savedArtifactIdsRef.current.add(savedArtifactId);
+            }
+          });
+        }
+      }
+    }
+  }, [messages, isLoading, artQuiz.addOrUpdateArtifact, artQuiz.generateQuizzesForArtifact]);
+
+  // --- Load quizzes when artifact is selected ---
+  useEffect(() => {
+    const artifactId = artQuiz.state.activeArtifactId;
+    if (!artifactId) return;
+    if (artQuiz.state.currentQuiz) return;
+    if (!savedArtifactIdsRef.current.has(artifactId)) return;
+
+    artQuiz.loadQuizzesFromAPI(artifactId).catch((error) => {
+      if (error?.code === "NOT_FOUND") return;
+      console.error("[ExplanationChatContainer] Failed to load quizzes:", error);
+    });
+  }, [artQuiz.state.activeArtifactId, artQuiz.state.currentQuiz, artQuiz.loadQuizzesFromAPI]);
+
+  // --- Quiz answer handler ---
+  const handleQuizAnswer = useCallback(
+    async (answer: string) => {
+      const quizId = (artQuiz.state.currentQuiz as { id?: string })?.id;
+      const artifactId = artQuiz.state.activeArtifactId;
+
+      if (quizId && artifactId) {
+        await artQuiz.answerQuizAPI(artifactId, quizId, answer, messages.length);
+      }
+    },
+    [artQuiz.state.currentQuiz, artQuiz.state.activeArtifactId, artQuiz.answerQuizAPI, messages.length]
+  );
+
   // ブックマーク切り替え
   const handleBookmarkToggle = useCallback(
     (lineNumber: number) => {
@@ -151,40 +339,54 @@ export function ExplanationChatContainer({
   );
 
   // チャットメッセージを処理（アーティファクトを非表示）
-  // ストリーミング中は不完全なタグを隠す
   const getProcessedContent = useCallback((content: string, isStreaming: boolean = false) => {
     let processed = content;
 
-    // ストリーミング中: 不完全なタグを隠す
     if (isStreaming) {
       processed = removeIncompleteStreamingTags(processed);
     }
 
-    // アーティファクト形式のコードをプレースホルダーに置換
+    processed = removeQuizMarkerFromContent(processed);
+
     const { contentWithoutArtifacts } = parseArtifacts(processed);
     processed = contentWithoutArtifacts;
 
     return processed;
   }, []);
 
+  // Should show right panel
+  const hasRightPanel = hasCode || hasArtifacts;
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Mode Header - z-30 to ensure dropdowns appear above main content */}
+      {/* Mode Header */}
       <div className="shrink-0 border-b border-border bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/80 relative z-30">
         <div className="mx-auto max-w-6xl px-2 sm:px-4 py-2 sm:py-3">
           <div className="flex items-center justify-between gap-2">
-            {/* Mode Selector */}
             <ChatModeSelector currentMode="explanation" conversationId={conversationId} />
 
-            {/* Right: Controls */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* Header Extra (Project Selector etc.) - Hidden on mobile */}
               <div className="hidden sm:flex items-center gap-2">
                 {headerExtra}
               </div>
 
+              {/* Artifact progress indicator */}
+              {hasArtifacts && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
+                      style={{ width: `${artQuiz.progressPercentage}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] sm:text-xs font-medium text-blue-400">
+                    {Math.round(artQuiz.progressPercentage)}%
+                  </div>
+                </div>
+              )}
+
               {/* Code Panel Toggle - Desktop only */}
-              {hasCode && (
+              {hasRightPanel && (
                 <button
                   onClick={() => setIsCodePanelCollapsed(!isCodePanelCollapsed)}
                   className={cn(
@@ -239,7 +441,7 @@ export function ExplanationChatContainer({
         <div
           className={cn(
             "flex flex-col min-h-0 transition-all duration-300 w-full",
-            hasCode && !isCodePanelCollapsed && "md:w-1/2"
+            hasRightPanel && !isCodePanelCollapsed && "md:w-1/2"
           )}
         >
           {/* Messages */}
@@ -256,14 +458,30 @@ export function ExplanationChatContainer({
                     message.role === "assistant" &&
                     !messages.slice(index + 1).some((m) => m.role === "assistant");
 
-                  // Determine if this message is currently streaming
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
-                  // Process message content (remove artifact placeholders)
-                  // Pass streaming state to hide incomplete tags during streaming
+                  // Check if message contains artifacts
+                  const containsArtifact = message.role === "assistant" &&
+                    message.content.includes("<!--ARTIFACT:");
+
+                  const isLastArtifactMessage = containsArtifact &&
+                    !messages.slice(index + 1).some((m) =>
+                      m.role === "assistant" &&
+                      m.content.includes("<!--ARTIFACT:")
+                    );
+
                   const processedMessage = message.role === "assistant"
                     ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
                     : message;
+
+                  // Completed quizzes after this message
+                  const completedQuizzesAfterThis = activeArtifactProgress.quizHistory.filter(
+                    (item) => item.answeredAtMessageCount === index + 1 && item.isCorrect && item.completedQuiz
+                  );
+
+                  // Should show current quiz after artifact message
+                  const shouldShowCurrentQuizHere = isLastArtifactMessage &&
+                    !activeArtifactProgress.isUnlocked;
 
                   return (
                     <div key={message.id || index} id={`msg-${index}`}>
@@ -278,6 +496,144 @@ export function ExplanationChatContainer({
                         mode="explanation"
                         conversationId={conversationId}
                       />
+
+                      {/* Completed quizzes inline */}
+                      {completedQuizzesAfterThis.map((quizItem, quizIndex) => (
+                        <div key={`completed-quiz-${index}-${quizIndex}`} className="px-4 py-4">
+                          <GenerationQuiz
+                            quiz={quizItem.completedQuiz!}
+                            onAnswer={() => {}}
+                            hintVisible={false}
+                            completedAnswer={quizItem.userAnswer}
+                            defaultCollapsed={false}
+                            isCollapsible={true}
+                            onAskForMoreExplanation={(quiz, userAnswer) => {
+                              const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
+                              const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
+
+                              let msg = `【システム生成クイズについての質問】\n\n`;
+                              msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
+                              msg += `【質問】\n${quiz.question}\n\n`;
+                              msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
+                              if (correctOption?.explanation) {
+                                msg += `解説: ${correctOption.explanation}\n`;
+                              }
+
+                              if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
+                                msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
+                                msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
+                              } else {
+                                msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
+                              }
+
+                              onSendMessage(msg);
+                            }}
+                          />
+                        </div>
+                      ))}
+
+                      {/* Unlock complete notification */}
+                      {activeArtifactProgress.isUnlocked &&
+                        index === unlockedAtMessageIndex &&
+                        activeArtifactProgress.quizHistory.length > 0 && (
+                        <div className="px-4 py-4">
+                          <div className="rounded-lg border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="size-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-green-400 text-2xl">emoji_events</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-bold text-lg text-green-400">
+                                  クイズ完了！
+                                </p>
+                                <p className="text-sm text-foreground/80">
+                                  {activeArtifactProgress.quizHistory.length}問全て正解しました。コードをコピーできます。
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 text-green-400 bg-green-500/20 px-3 py-1.5 rounded-full">
+                                <span className="material-symbols-outlined text-lg">lock_open</span>
+                                <span className="text-sm font-medium">アンロック</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Current quiz after artifact message */}
+                      {shouldShowCurrentQuizHere && (
+                        artQuiz.state.currentQuiz ? (
+                          <div id="current-quiz-block" className="px-4 py-4">
+                            <GenerationQuiz
+                              quiz={artQuiz.state.currentQuiz}
+                              onAnswer={handleQuizAnswer}
+                              hintVisible={artQuiz.state.hintVisible}
+                              isCollapsible={true}
+                              onAskAboutQuestion={(question, opts) => {
+                                const optionsList = opts.join("\n");
+                                onSendMessage(
+                                  `このクイズについて教えてください：\n\n質問: ${question}\n\n選択肢:\n${optionsList}\n\n正解を教えずに、この問題を解くためのヒントや考え方を教えてください。`
+                                );
+                              }}
+                              onAskForMoreExplanation={(quiz, userAnswer) => {
+                                const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
+                                const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
+
+                                let msg = `【システム生成クイズについての質問】\n\n`;
+                                msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
+                                msg += `【質問】\n${quiz.question}\n\n`;
+                                msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
+                                if (correctOption?.explanation) {
+                                  msg += `解説: ${correctOption.explanation}\n`;
+                                }
+
+                                if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
+                                  msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
+                                  msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
+                                } else {
+                                  msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
+                                }
+
+                                onSendMessage(msg);
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          artQuiz.activeArtifact && !isLoading && (
+                            <div className="px-4 py-4">
+                              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-blue-400">quiz</span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-foreground/90">
+                                      クイズを読み込んでいます...
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      クイズに回答してコードをアンロックしましょう
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (artQuiz.activeArtifact?.id) {
+                                        artQuiz.generateQuizzesForArtifact(artQuiz.activeArtifact.id).catch((error) => {
+                                          console.error("[ExplanationChatContainer] Quiz regeneration failed:", error);
+                                        });
+                                      }
+                                    }}
+                                    className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+                                  >
+                                    <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
+                                    クイズを再生成
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )
+                      )}
                     </div>
                   );
                 })}
@@ -297,8 +653,8 @@ export function ExplanationChatContainer({
           </div>
         </div>
 
-        {/* Mobile FAB - Show Code Sheet */}
-        {hasCode && (
+        {/* Mobile FAB - Explanation Code */}
+        {hasCode && !hasArtifacts && (
           <button
             onClick={() => setIsMobileCodeSheetOpen(true)}
             className={cn(
@@ -314,7 +670,16 @@ export function ExplanationChatContainer({
           </button>
         )}
 
-        {/* Mobile Code Bottom Sheet */}
+        {/* Mobile FAB - Artifact Code */}
+        {hasArtifacts && (
+          <MobileCodeFAB
+            onClick={() => setIsMobileArtifactSheetOpen(true)}
+            progressPercentage={artQuiz.progressPercentage}
+            themeColor="blue"
+          />
+        )}
+
+        {/* Mobile Code Bottom Sheet (Explanation) */}
         {hasCode && codeState.sourceCode && (
           <MobileExplanationCodeSheet
             isOpen={isMobileCodeSheetOpen}
@@ -328,8 +693,61 @@ export function ExplanationChatContainer({
           />
         )}
 
-        {/* Right Panel - Code - Desktop Only */}
-        {hasCode && !isCodePanelCollapsed && codeState.sourceCode && (
+        {/* Mobile Artifact Bottom Sheet */}
+        {hasArtifacts && (
+          <MobileArtifactSheet
+            isOpen={isMobileArtifactSheetOpen}
+            onClose={() => setIsMobileArtifactSheetOpen(false)}
+            activeArtifact={artQuiz.activeArtifact}
+            artifacts={artifactsList}
+            activeArtifactId={artQuiz.state.activeArtifactId}
+            artifactProgress={artQuiz.state.artifactProgress}
+            unlockLevel={activeArtifactProgress.unlockLevel}
+            totalQuestions={activeArtifactProgress.totalQuestions}
+            progressPercentage={activeArtifactProgress.progressPercentage}
+            canCopy={activeArtifactProgress.canCopy}
+            onSelectArtifact={artQuiz.setActiveArtifact}
+            themeColor="blue"
+            isStreaming={isActiveArtifactStreaming}
+          />
+        )}
+
+        {/* Panel view toggle (when both panels are available) */}
+        {hasCode && hasArtifacts && !isCodePanelCollapsed && (
+          <div className="hidden md:flex absolute top-2 right-2 z-20 bg-zinc-800/90 backdrop-blur rounded-lg border border-zinc-700 p-0.5">
+            <button
+              onClick={() => setRightPanelView("explanation")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-colors",
+                rightPanelView === "explanation"
+                  ? "text-blue-400 bg-blue-500/15"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <span className="material-symbols-outlined text-sm">visibility</span>
+              <span>解説</span>
+            </button>
+            <button
+              onClick={() => setRightPanelView("artifact")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-colors",
+                rightPanelView === "artifact"
+                  ? "text-blue-400 bg-blue-500/15"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <span className="material-symbols-outlined text-sm">code</span>
+              <span>生成コード</span>
+              {!activeArtifactProgress.canCopy && (
+                <span className="material-symbols-outlined text-[10px]">lock</span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Right Panel: Explanation Code - Desktop Only */}
+        {hasCode && !isCodePanelCollapsed && codeState.sourceCode &&
+          (!hasArtifacts || rightPanelView === "explanation") && (
           <ExplanationCodePanel
             code={codeState.sourceCode}
             language={codeState.language}
@@ -342,6 +760,26 @@ export function ExplanationChatContainer({
             onClose={() => setIsCodePanelCollapsed(true)}
             scrollToLine={codeState.scrollToLine}
             onScrollComplete={resetScrollTarget}
+          />
+        )}
+
+        {/* Right Panel: Artifact Code - Desktop Only */}
+        {hasArtifacts && !isCodePanelCollapsed &&
+          (!hasCode || rightPanelView === "artifact") && (
+          <ArtifactCodePanel
+            artifacts={artifactsList}
+            activeArtifact={artQuiz.activeArtifact}
+            activeArtifactId={artQuiz.state.activeArtifactId}
+            artifactProgress={artQuiz.state.artifactProgress}
+            unlockLevel={activeArtifactProgress.unlockLevel}
+            totalQuestions={activeArtifactProgress.totalQuestions}
+            progressPercentage={activeArtifactProgress.progressPercentage}
+            canCopy={activeArtifactProgress.canCopy}
+            onSelectArtifact={artQuiz.setActiveArtifact}
+            onCollapse={() => setIsCodePanelCollapsed(true)}
+            themeColor="blue"
+            panelTitle="生成されたコード"
+            isStreaming={isActiveArtifactStreaming}
           />
         )}
       </div>
@@ -363,10 +801,7 @@ function BranchSelector({
 }) {
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-10" onClick={onClose} />
-
-      {/* Dropdown */}
       <div className="absolute right-0 top-full mt-1 z-20 w-64 rounded-lg border border-border bg-card shadow-lg overflow-hidden">
         <div className="px-3 py-2 border-b border-border bg-muted/50">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -374,12 +809,10 @@ function BranchSelector({
             <span>会話の分岐</span>
           </div>
         </div>
-
         <div className="max-h-64 overflow-y-auto">
           {branches.map((branch) => {
             const isActive = branch.id === currentBranchId;
             const isMain = !branch.parentBranchId;
-
             return (
               <button
                 key={branch.id}
@@ -410,7 +843,6 @@ function BranchSelector({
             );
           })}
         </div>
-
         <div className="px-3 py-2 border-t border-border bg-muted/30">
           <p className="text-xs text-muted-foreground">
             メッセージをホバーして「分岐」ボタンをクリックすると、その時点から新しい会話を始められます
@@ -459,7 +891,6 @@ function WelcomeScreen({
         </p>
       )}
 
-      {/* 学習のポイント */}
       <div className="w-full max-w-md mb-6 sm:mb-8 p-3 sm:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
         <div className="flex items-center gap-2 mb-2">
           <span className={cn("material-symbols-outlined text-lg sm:text-xl", config.color)}>info</span>
