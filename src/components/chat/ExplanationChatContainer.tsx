@@ -6,8 +6,8 @@ import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
 import { ExplanationCodePanel, MobileExplanationCodeSheet } from "./ExplanationCodePanel";
 import { ArtifactCodePanel, MobileArtifactSheet, MobileCodeFAB } from "./ArtifactCodePanel";
-import { GenerationQuiz } from "./GenerationQuiz";
-import { Button } from "@/components/ui/button";
+import { InlineQuizSection } from "./InlineQuizSection";
+import { SharedBranchSelector } from "./SharedBranchSelector";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useExplanationMode } from "@/hooks/useExplanationMode";
 import { useArtifactDetection } from "@/hooks/useArtifactDetection";
@@ -239,7 +239,7 @@ export function ExplanationChatContainer({
                   </button>
 
                   {showBranchSelector && (
-                    <BranchSelector
+                    <SharedBranchSelector
                       branches={branches}
                       currentBranchId={currentBranchId}
                       onSelect={(branchId) => {
@@ -295,15 +295,6 @@ export function ExplanationChatContainer({
                     ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
                     : message;
 
-                  // Completed quizzes after this message
-                  const completedQuizzesAfterThis = activeArtifactProgress.quizHistory.filter(
-                    (item) => item.answeredAtMessageCount === index + 1 && item.isCorrect && item.completedQuiz
-                  );
-
-                  // Should show current quiz after artifact message
-                  const shouldShowCurrentQuizHere = isLastArtifactMessage &&
-                    !activeArtifactProgress.isUnlocked;
-
                   return (
                     <div key={message.id || index} id={`msg-${index}`}>
                       <ChatMessage
@@ -318,143 +309,27 @@ export function ExplanationChatContainer({
                         conversationId={conversationId}
                       />
 
-                      {/* Completed quizzes inline */}
-                      {completedQuizzesAfterThis.map((quizItem, quizIndex) => (
-                        <div key={`completed-quiz-${index}-${quizIndex}`} className="px-4 py-4">
-                          <GenerationQuiz
-                            quiz={quizItem.completedQuiz!}
-                            onAnswer={() => {}}
-                            hintVisible={false}
-                            completedAnswer={quizItem.userAnswer}
-                            defaultCollapsed={false}
-                            isCollapsible={true}
-                            onAskForMoreExplanation={(quiz, userAnswer) => {
-                              const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
-                              const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
-
-                              let msg = `【システム生成クイズについての質問】\n\n`;
-                              msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
-                              msg += `【質問】\n${quiz.question}\n\n`;
-                              msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
-                              if (correctOption?.explanation) {
-                                msg += `解説: ${correctOption.explanation}\n`;
-                              }
-
-                              if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
-                                msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
-                                msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
-                              } else {
-                                msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
-                              }
-
-                              onSendMessage(msg);
-                            }}
-                          />
-                        </div>
-                      ))}
-
-                      {/* Unlock complete notification */}
-                      {activeArtifactProgress.isUnlocked &&
-                        index === unlockedAtMessageIndex &&
-                        activeArtifactProgress.quizHistory.length > 0 && (
-                        <div className="px-4 py-4">
-                          <div className="rounded-lg border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="size-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-green-400 text-2xl">emoji_events</span>
-                              </div>
-                              <div className="flex-1">
-                                <p className="font-bold text-lg text-green-400">
-                                  クイズ完了！
-                                </p>
-                                <p className="text-sm text-foreground/80">
-                                  {activeArtifactProgress.quizHistory.length}問全て正解しました。コードをコピーできます。
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1 text-green-400 bg-green-500/20 px-3 py-1.5 rounded-full">
-                                <span className="material-symbols-outlined text-lg">lock_open</span>
-                                <span className="text-sm font-medium">アンロック</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Current quiz after artifact message */}
-                      {shouldShowCurrentQuizHere && (
-                        artQuiz.state.currentQuiz ? (
-                          <div id="current-quiz-block" className="px-4 py-4">
-                            <GenerationQuiz
-                              quiz={artQuiz.state.currentQuiz}
-                              onAnswer={handleQuizAnswer}
-                              hintVisible={artQuiz.state.hintVisible}
-                              isCollapsible={true}
-                              onAskAboutQuestion={(question, opts) => {
-                                const optionsList = opts.join("\n");
-                                onSendMessage(
-                                  `このクイズについて教えてください：\n\n質問: ${question}\n\n選択肢:\n${optionsList}\n\n正解を教えずに、この問題を解くためのヒントや考え方を教えてください。`
-                                );
-                              }}
-                              onAskForMoreExplanation={(quiz, userAnswer) => {
-                                const correctOption = quiz.options.find(o => o.label === quiz.correctLabel);
-                                const userOption = userAnswer ? quiz.options.find(o => o.label === userAnswer) : null;
-
-                                let msg = `【システム生成クイズについての質問】\n\n`;
-                                msg += `※これはコード理解度確認のためにシステムが自動生成したクイズです。以下のクイズについて詳しく解説してください。\n\n`;
-                                msg += `【質問】\n${quiz.question}\n\n`;
-                                msg += `【正解】\n${quiz.correctLabel}) ${correctOption?.text || ""}\n`;
-                                if (correctOption?.explanation) {
-                                  msg += `解説: ${correctOption.explanation}\n`;
-                                }
-
-                                if (userAnswer && userAnswer !== quiz.correctLabel && userOption) {
-                                  msg += `\n【私の回答】\n${userAnswer}) ${userOption.text}\n`;
-                                  msg += `\nなぜ私の回答が間違いで、正解が正しいのか、より詳しく説明してください。`;
-                                } else {
-                                  msg += `\nこの正解についてさらに深く理解したいです。関連する概念や応用例も含めて詳しく説明してください。`;
-                                }
-
-                                onSendMessage(msg);
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          artQuiz.activeArtifact && !isLoading && (
-                            <div className="px-4 py-4">
-                              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-blue-400">quiz</span>
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="text-sm font-medium text-foreground/90">
-                                      クイズを読み込んでいます...
-                                    </p>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                      クイズに回答してコードをアンロックしましょう
-                                    </p>
-                                  </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      if (artQuiz.activeArtifact?.id) {
-                                        artQuiz.generateQuizzesForArtifact(artQuiz.activeArtifact.id).catch((error) => {
-                                          console.error("[ExplanationChatContainer] Quiz regeneration failed:", error);
-                                        });
-                                      }
-                                    }}
-                                    className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
-                                  >
-                                    <span className="material-symbols-outlined text-base mr-1.5">refresh</span>
-                                    クイズを再生成
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        )
-                      )}
+                      <InlineQuizSection
+                        messageIndex={index}
+                        quizHistory={activeArtifactProgress.quizHistory}
+                        isUnlocked={activeArtifactProgress.isUnlocked}
+                        unlockedAtMessageIndex={unlockedAtMessageIndex}
+                        isLastArtifactMessage={isLastArtifactMessage}
+                        currentQuiz={artQuiz.state.currentQuiz}
+                        hintVisible={artQuiz.state.hintVisible}
+                        activeArtifact={artQuiz.activeArtifact}
+                        isLoading={isLoading}
+                        onQuizAnswer={handleQuizAnswer}
+                        onSendMessage={onSendMessage}
+                        onRegenerateQuiz={() => {
+                          if (artQuiz.activeArtifact?.id) {
+                            artQuiz.generateQuizzesForArtifact(artQuiz.activeArtifact.id).catch((error) => {
+                              console.error("[ExplanationChatContainer] Quiz regeneration failed:", error);
+                            });
+                          }
+                        }}
+                        themeColor="blue"
+                      />
                     </div>
                   );
                 })}
@@ -605,72 +480,6 @@ export function ExplanationChatContainer({
         )}
       </div>
     </div>
-  );
-}
-
-// Branch Selector Dropdown
-function BranchSelector({
-  branches,
-  currentBranchId,
-  onSelect,
-  onClose,
-}: {
-  branches: ConversationBranch[];
-  currentBranchId?: string;
-  onSelect: (branchId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 z-20 w-64 rounded-lg border border-border bg-card shadow-lg overflow-hidden">
-        <div className="px-3 py-2 border-b border-border bg-muted/50">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="material-symbols-outlined text-base">history</span>
-            <span>会話の分岐</span>
-          </div>
-        </div>
-        <div className="max-h-64 overflow-y-auto">
-          {branches.map((branch) => {
-            const isActive = branch.id === currentBranchId;
-            const isMain = !branch.parentBranchId;
-            return (
-              <button
-                key={branch.id}
-                onClick={() => onSelect(branch.id)}
-                className={cn(
-                  "w-full text-left px-3 py-2 flex items-center gap-3 transition-colors",
-                  isActive ? "bg-primary/10 text-primary" : "hover:bg-muted/50"
-                )}
-              >
-                <span
-                  className={cn(
-                    "material-symbols-outlined text-lg",
-                    isMain ? "text-blue-400" : "text-orange-400"
-                  )}
-                >
-                  {isMain ? "timeline" : "fork_right"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{branch.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {isMain ? "オリジナル" : `メッセージ ${branch.forkPointIndex + 1} から分岐`}
-                  </div>
-                </div>
-                {isActive && (
-                  <span className="material-symbols-outlined text-primary text-lg">check</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <div className="px-3 py-2 border-t border-border bg-muted/30">
-          <p className="text-xs text-muted-foreground">
-            メッセージをホバーして「分岐」ボタンをクリックすると、その時点から新しい会話を始められます
-          </p>
-        </div>
-      </div>
-    </>
   );
 }
 

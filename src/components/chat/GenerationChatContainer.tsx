@@ -9,6 +9,7 @@ import { BlurredCode } from "./BlurredCode";
 import { GenerationQuiz } from "./GenerationQuiz";
 import { DialogueUnlock } from "./DialogueUnlock";
 import { GenerationOptionsPopover } from "./GenerationOptionsPopover";
+import { SharedBranchSelector } from "./SharedBranchSelector";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -642,7 +643,7 @@ export function GenerationChatContainer({
                   </button>
 
                   {showBranchSelector && (
-                    <BranchSelector
+                    <SharedBranchSelector
                       branches={branches}
                       currentBranchId={currentBranchId}
                       onSelect={(branchId) => {
@@ -1187,82 +1188,6 @@ export function GenerationChatContainer({
         )}
       </div>
     </div>
-  );
-}
-
-// Branch Selector Dropdown
-function BranchSelector({
-  branches,
-  currentBranchId,
-  onSelect,
-  onClose,
-}: {
-  branches: ConversationBranch[];
-  currentBranchId?: string;
-  onSelect: (branchId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-10" onClick={onClose} />
-
-      {/* Dropdown */}
-      <div className="absolute right-0 top-full mt-1 z-20 w-64 rounded-lg border border-border bg-card shadow-lg overflow-hidden">
-        <div className="px-3 py-2 border-b border-border bg-muted/50">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="material-symbols-outlined text-base">history</span>
-            <span>会話の分岐</span>
-          </div>
-        </div>
-
-        <div className="max-h-64 overflow-y-auto">
-          {branches.map((branch) => {
-            const isActive = branch.id === currentBranchId;
-            const isMain = !branch.parentBranchId;
-
-            return (
-              <button
-                key={branch.id}
-                onClick={() => onSelect(branch.id)}
-                className={cn(
-                  "w-full text-left px-3 py-2 flex items-center gap-3 transition-colors",
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "hover:bg-muted/50"
-                )}
-              >
-                <span
-                  className={cn(
-                    "material-symbols-outlined text-lg",
-                    isMain ? "text-blue-400" : "text-orange-400"
-                  )}
-                >
-                  {isMain ? "timeline" : "fork_right"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{branch.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {isMain
-                      ? "オリジナル"
-                      : `メッセージ ${branch.forkPointIndex + 1} から分岐`}
-                  </div>
-                </div>
-                {isActive && (
-                  <span className="material-symbols-outlined text-primary text-lg">check</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="px-3 py-2 border-t border-border bg-muted/30">
-          <p className="text-xs text-muted-foreground">
-            メッセージをホバーして「分岐」ボタンをクリックすると、その時点から新しい会話を始められます
-          </p>
-        </div>
-      </div>
-    </>
   );
 }
 

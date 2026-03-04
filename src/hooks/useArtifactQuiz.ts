@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { Artifact } from "@/types/chat";
 import {
   upsertArtifact as apiUpsertArtifact,
@@ -202,13 +202,13 @@ export function useArtifactQuiz(options: ArtifactQuizOptions = {}) {
     ? state.artifacts[state.activeArtifactId]
     : null;
 
-  // Quiz status for consumers
-  const quizStatus: ArtifactQuizStatus = (() => {
+  // Quiz status for consumers (memoized to prevent unnecessary re-renders)
+  const quizStatus: ArtifactQuizStatus = useMemo(() => {
     if (Object.keys(state.artifacts).length === 0) return "no-artifacts";
     if (isUnlocked) return "unlocked";
     if (state.currentQuiz) return "quizzing";
     return "has-code";
-  })();
+  }, [state.artifacts, isUnlocked, state.currentQuiz]);
 
   // Keep artifactsRef in sync
   useEffect(() => {
