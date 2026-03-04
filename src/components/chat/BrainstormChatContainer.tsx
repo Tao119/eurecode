@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -310,11 +310,6 @@ export function BrainstormChatContainer({
     }
   }, [state.transitionSuggestion.targetPhase, acceptTransitionSuggestion, sendPhaseGuidanceMessage]);
 
-  // 遷移提案を閉じる
-  const handleDismissTransition = useCallback(() => {
-    dismissTransitionSuggestion();
-  }, [dismissTransitionSuggestion]);
-
   // クイズ再生成
   const handleRegenerateQuiz = useCallback(() => {
     if (artQuiz.activeArtifact?.id) {
@@ -362,6 +357,21 @@ export function BrainstormChatContainer({
   }, [router]);
 
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
+
+  // Pre-compute last indices to avoid O(n²) in message loop
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
+  const lastArtifactIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && messages[i].content.includes("<!--ARTIFACT:")) return i;
+    }
+    return -1;
+  }, [messages]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -576,19 +586,14 @@ export function BrainstormChatContainer({
             ) : (
               <div className="mx-auto max-w-4xl pb-4">
                 {messages.map((message, index) => {
-                  const isLastAssistantMessage =
-                    message.role === "assistant" &&
-                    !messages.slice(index + 1).some((m) => m.role === "assistant");
+                  const isLastAssistantMessage = index === lastAssistantIndex;
 
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
                   // Check for artifacts in this message
                   const containsArtifact = message.role === "assistant" &&
                     message.content.includes("<!--ARTIFACT:");
-                  const isLastArtifactMessage = containsArtifact &&
-                    !messages.slice(index + 1).some((m) =>
-                      m.role === "assistant" && m.content.includes("<!--ARTIFACT:")
-                    );
+                  const isLastArtifactMessage = index === lastArtifactIndex;
 
                   // Process message (hide artifact tags)
                   const processedMessage = message.role === "assistant"
@@ -636,7 +641,7 @@ export function BrainstormChatContainer({
                       reason={state.transitionSuggestion.reason}
                       completionScore={state.phaseProgress[state.currentPhase].completionScore}
                       onAccept={handleAcceptTransition}
-                      onDismiss={handleDismissTransition}
+                      onDismiss={dismissTransitionSuggestion}
                     />
                   </div>
                 )}

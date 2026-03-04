@@ -84,6 +84,21 @@ export function GenerationChatContainer({
   const hasBranches = branches.length > 1;
   const currentBranch = branches.find((b) => b.id === currentBranchId);
 
+  // Pre-compute last indices to avoid O(n²) in message loop
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
+  const lastArtifactIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && messages[i].content.includes("<!--ARTIFACT:")) return i;
+    }
+    return -1;
+  }, [messages]);
+
   // Scroll to target message from learning detail page
   useEffect(() => {
     if (messages.length === 0) return;
@@ -674,24 +689,17 @@ export function GenerationChatContainer({
               <div className="mx-auto max-w-3xl pb-4">
                 {messages.map((message, index) => {
                   // Find if this is the last assistant message
-                  const isLastAssistantMessage =
-                    message.role === "assistant" &&
-                    !messages.slice(index + 1).some((m) => m.role === "assistant");
+                  const isLastAssistantMessage = index === lastAssistantIndex;
 
                   // Determine if this message is currently streaming
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
                   // Check if this message contains artifact content (<!--ARTIFACT: markers)
-                  // This is the "artifact message" where currentQuiz should be displayed after
                   const containsArtifact = message.role === "assistant" &&
                     message.content.includes("<!--ARTIFACT:");
 
                   // Find if this is the last message with artifact content
-                  const isLastArtifactMessage = containsArtifact &&
-                    !messages.slice(index + 1).some((m) =>
-                      m.role === "assistant" &&
-                      m.content.includes("<!--ARTIFACT:")
-                    );
+                  const isLastArtifactMessage = index === lastArtifactIndex;
 
                   // Process message content (remove quiz markers and artifact placeholders)
                   // Pass streaming state to hide incomplete tags during streaming

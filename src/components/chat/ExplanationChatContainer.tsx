@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
@@ -168,13 +168,20 @@ export function ExplanationChatContainer({
     }
   }, [artQuiz]);
 
-  // ブックマーク切り替え
-  const handleBookmarkToggle = useCallback(
-    (lineNumber: number) => {
-      toggleBookmark(lineNumber);
-    },
-    [toggleBookmark]
-  );
+  // Pre-compute last indices to avoid O(n²) in message loop
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
+  const lastArtifactIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && messages[i].content.includes("<!--ARTIFACT:")) return i;
+    }
+    return -1;
+  }, [messages]);
 
   // Should show right panel
   const hasRightPanel = hasCode || hasArtifacts;
@@ -276,9 +283,7 @@ export function ExplanationChatContainer({
             ) : (
               <div className="mx-auto max-w-3xl pb-4">
                 {messages.map((message, index) => {
-                  const isLastAssistantMessage =
-                    message.role === "assistant" &&
-                    !messages.slice(index + 1).some((m) => m.role === "assistant");
+                  const isLastAssistantMessage = index === lastAssistantIndex;
 
                   const isMessageStreaming = isLoading && index === messages.length - 1 && message.role === "assistant";
 
@@ -286,11 +291,7 @@ export function ExplanationChatContainer({
                   const containsArtifact = message.role === "assistant" &&
                     message.content.includes("<!--ARTIFACT:");
 
-                  const isLastArtifactMessage = containsArtifact &&
-                    !messages.slice(index + 1).some((m) =>
-                      m.role === "assistant" &&
-                      m.content.includes("<!--ARTIFACT:")
-                    );
+                  const isLastArtifactMessage = index === lastArtifactIndex;
 
                   const processedMessage = message.role === "assistant"
                     ? { ...message, content: getProcessedContent(message.content, isMessageStreaming) }
@@ -380,7 +381,7 @@ export function ExplanationChatContainer({
             filename={codeState.filename}
             highlightedLines={codeState.highlightedLines}
             bookmarks={codeState.bookmarks}
-            onBookmarkToggle={handleBookmarkToggle}
+            onBookmarkToggle={toggleBookmark}
           />
         )}
 
@@ -447,7 +448,7 @@ export function ExplanationChatContainer({
             previousHighlightedLines={codeState.previousHighlightedLines}
             bookmarks={codeState.bookmarks}
             explainedRanges={codeState.explainedRanges}
-            onBookmarkToggle={handleBookmarkToggle}
+            onBookmarkToggle={toggleBookmark}
             onClose={() => setIsCodePanelCollapsed(true)}
             scrollToLine={codeState.scrollToLine}
             onScrollComplete={resetScrollTarget}

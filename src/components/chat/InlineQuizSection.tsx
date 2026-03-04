@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { GenerationQuiz } from "./GenerationQuiz";
 import { Button } from "@/components/ui/button";
 import type { UnlockQuiz, QuizHistoryItem } from "@/hooks/useArtifactQuiz";
@@ -116,6 +116,9 @@ export function InlineQuizSection({
 }: InlineQuizSectionProps) {
   const theme = THEME_COLORS[themeColor];
 
+  // Stable no-op for completed quiz's onAnswer (never called, but required by GenerationQuiz)
+  const noop = useCallback(() => {}, []);
+
   // Completed quizzes answered after this message
   const completedQuizzesAfterThis = quizHistory.filter(
     (item) =>
@@ -154,7 +157,7 @@ export function InlineQuizSection({
         >
           <GenerationQuiz
             quiz={quizItem.completedQuiz!}
-            onAnswer={() => {}}
+            onAnswer={noop}
             hintVisible={false}
             completedAnswer={quizItem.userAnswer}
             defaultCollapsed={false}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
@@ -84,6 +84,14 @@ export function ChatContainer({
   const hasBranches = branches.length > 1;
   const currentBranch = branches.find((b) => b.id === currentBranchId);
 
+  // Pre-compute last assistant index to avoid O(n²) in message loop
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Mode Header */}
@@ -145,9 +153,7 @@ export function ChatContainer({
           <div className="mx-auto max-w-4xl pb-4">
             {messages.map((message, index) => {
               // Find if this is the last assistant message
-              const isLastAssistantMessage =
-                message.role === "assistant" &&
-                !messages.slice(index + 1).some((m) => m.role === "assistant");
+              const isLastAssistantMessage = index === lastAssistantIndex;
 
               const isStreamingMessage =
                 isLoading && index === messages.length - 1 && message.role === "assistant";
