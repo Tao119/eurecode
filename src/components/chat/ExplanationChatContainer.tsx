@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { ChatModeSelector } from "./ChatModeSelector";
@@ -10,14 +10,9 @@ import { GenerationQuiz } from "./GenerationQuiz";
 import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useExplanationMode } from "@/hooks/useExplanationMode";
-import {
-  useArtifactQuiz,
-  type PersistedArtifactQuizState,
-  type ArtifactProgress,
-} from "@/hooks/useArtifactQuiz";
+import { useArtifactDetection } from "@/hooks/useArtifactDetection";
+import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
 import { parseLineReferences, findFirstCodeBlockInMessages } from "@/lib/line-reference-parser";
-import { parseArtifacts } from "@/lib/artifacts";
-import { removeIncompleteStreamingTags, removeQuizMarkerFromContent } from "@/lib/quiz-generator";
 import { MODE_CONFIG } from "@/config/modes";
 import type { Message, ConversationBranch, Artifact, FileAttachment, LearnerGoal } from "@/types/chat";
 import { cn } from "@/lib/utils";
@@ -90,67 +85,23 @@ export function ExplanationChatContainer({
     hasCode,
   } = useExplanationMode({ conversationId });
 
-  // アーティファクト・クイズ状態管理（AI生成コード用）
-  const artQuiz = useArtifactQuiz({
+  // アーティファクト検出・クイズ管理（共通フック）
+  const {
+    artQuiz,
+    artifactsList,
+    hasArtifacts,
+    activeArtifactProgress,
+    unlockedAtMessageIndex,
+    isActiveArtifactStreaming,
+    handleQuizAnswer,
+    getProcessedContent,
+  } = useArtifactDetection({
     conversationId,
-    initialState: initialArtifactQuizState,
-    skipAllowed: false,
-    hintSpeed: "30sec",
+    messages,
+    isLoading,
+    initialArtifactQuizState,
+    logPrefix: "ExplanationChatContainer",
   });
-
-  const artifactsList = useMemo(() => Object.values(artQuiz.state.artifacts), [artQuiz.state.artifacts]);
-  const hasArtifacts = artifactsList.length > 0;
-
-  // Track saved artifact IDs
-  const savedArtifactIdsRef = useRef<Set<string>>(new Set());
-
-  // Mark initial state artifacts as saved
-  useEffect(() => {
-    if (initialArtifactQuizState?.artifacts) {
-      for (const artifactId of Object.keys(initialArtifactQuizState.artifacts)) {
-        savedArtifactIdsRef.current.add(artifactId);
-      }
-    }
-  }, [initialArtifactQuizState]);
-
-  // Per-artifact progress
-  const activeArtifactProgress = useMemo(() => {
-    const progress = artQuiz.state.activeArtifactId
-      ? artQuiz.state.artifactProgress[artQuiz.state.activeArtifactId]
-      : null;
-    const total = progress?.totalQuestions ?? artQuiz.state.totalQuestions;
-    const level = progress?.unlockLevel ?? artQuiz.state.unlockLevel;
-    const isUnlocked = total === 0 || level >= total;
-    const quizHistory = progress?.quizHistory ?? artQuiz.state.quizHistory ?? [];
-    return {
-      unlockLevel: level,
-      totalQuestions: total,
-      progressPercentage: total === 0 ? 100 : (level / total) * 100,
-      canCopy: isUnlocked,
-      isUnlocked,
-      quizHistory,
-    };
-  }, [
-    artQuiz.state.activeArtifactId,
-    artQuiz.state.artifactProgress,
-    artQuiz.state.totalQuestions,
-    artQuiz.state.unlockLevel,
-    artQuiz.state.quizHistory,
-  ]);
-
-  // Calculate unlock message index
-  const unlockedAtMessageIndex = useMemo(() => {
-    if (!activeArtifactProgress.isUnlocked) return -1;
-    if (activeArtifactProgress.quizHistory.length === 0) return -1;
-    const lastQuiz = activeArtifactProgress.quizHistory.reduce((max, item) => {
-      const count = item.answeredAtMessageCount ?? 0;
-      return count > (max?.answeredAtMessageCount ?? 0) ? item : max;
-    }, activeArtifactProgress.quizHistory[0]);
-    return lastQuiz?.answeredAtMessageCount ? lastQuiz.answeredAtMessageCount - 1 : -1;
-  }, [activeArtifactProgress.isUnlocked, activeArtifactProgress.quizHistory]);
-
-  // Detect streaming artifacts (truncated = still being generated)
-  const isActiveArtifactStreaming = isLoading && (artQuiz.activeArtifact?.id?.endsWith("-truncated") ?? false);
 
   // Auto-switch to artifact panel when first artifact appears
   useEffect(() => {
@@ -159,12 +110,8 @@ export function ExplanationChatContainer({
     }
   }, [hasArtifacts, hasCode]);
 
-  // 前回処理したメッセージ数を追跡
-  const prevMessagesLengthRef = useRef(0);
+  // 行参照処理の追跡
   const lineRefProcessedContentRef = useRef<string>("");
-  const artProcessedContentRef = useRef<string>("");
-  const initializedRef = useRef(false);
-  const quizGeneratedRef = useRef<Set<string>>(new Set());
 
   // メッセージからコードを抽出（ユーザーが貼り付けたコード）
   useEffect(() => {
@@ -220,116 +167,6 @@ export function ExplanationChatContainer({
     });
   }, [messages]);
 
-  // --- Artifact detection (initial load) ---
-  useEffect(() => {
-    if (initializedRef.current || messages.length === 0) return;
-    initializedRef.current = true;
-    prevMessagesLengthRef.current = messages.length;
-
-    for (const message of messages) {
-      if (message.role === "assistant") {
-        const { artifacts } = parseArtifacts(message.content);
-        for (const artifact of artifacts) {
-          artQuiz.addOrUpdateArtifact(artifact);
-        }
-      }
-    }
-  }, [messages, artQuiz.addOrUpdateArtifact]);
-
-  // --- Streaming artifact detection ---
-  const streamingArtifactRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!isLoading || !initializedRef.current || messages.length === 0) {
-      if (!isLoading) {
-        streamingArtifactRef.current.clear();
-      }
-      return;
-    }
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role !== "assistant") return;
-
-    const { artifacts } = parseArtifacts(lastMessage.content);
-    if (artifacts.length > 0) {
-      for (const artifact of artifacts) {
-        if (!streamingArtifactRef.current.has(artifact.id)) {
-          streamingArtifactRef.current.add(artifact.id);
-          artQuiz.addOrUpdateArtifact(artifact);
-        }
-      }
-    }
-  }, [isLoading, messages, artQuiz.addOrUpdateArtifact]);
-
-  // --- Post-streaming artifact processing + quiz generation ---
-  useEffect(() => {
-    if (!initializedRef.current) return;
-    if (messages.length === 0) return;
-
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role !== "assistant") return;
-
-    const content = lastMessage.content;
-    const isNewMessage = messages.length > prevMessagesLengthRef.current;
-    const isStreamingComplete = !isLoading && artProcessedContentRef.current !== content;
-
-    if (!isNewMessage && !isStreamingComplete) return;
-
-    prevMessagesLengthRef.current = messages.length;
-    if (artProcessedContentRef.current === content) return;
-    artProcessedContentRef.current = content;
-
-    const { artifacts } = parseArtifacts(content);
-    if (artifacts.length > 0) {
-      for (const artifact of artifacts) {
-        const shouldGenerateQuiz = !isLoading && !quizGeneratedRef.current.has(artifact.id);
-
-        if (shouldGenerateQuiz) {
-          quizGeneratedRef.current.add(artifact.id);
-          artQuiz.addOrUpdateArtifact(artifact).then((savedArtifactId) => {
-            if (savedArtifactId) {
-              savedArtifactIdsRef.current.add(savedArtifactId);
-              artQuiz.generateQuizzesForArtifact(savedArtifactId).catch((error) => {
-                console.error("[ExplanationChatContainer] Quiz generation failed:", error);
-              });
-            }
-          });
-        } else {
-          artQuiz.addOrUpdateArtifact(artifact).then((savedArtifactId) => {
-            if (savedArtifactId) {
-              savedArtifactIdsRef.current.add(savedArtifactId);
-            }
-          });
-        }
-      }
-    }
-  }, [messages, isLoading, artQuiz.addOrUpdateArtifact, artQuiz.generateQuizzesForArtifact]);
-
-  // --- Load quizzes when artifact is selected ---
-  useEffect(() => {
-    const artifactId = artQuiz.state.activeArtifactId;
-    if (!artifactId) return;
-    if (artQuiz.state.currentQuiz) return;
-    if (!savedArtifactIdsRef.current.has(artifactId)) return;
-
-    artQuiz.loadQuizzesFromAPI(artifactId).catch((error) => {
-      if (error?.code === "NOT_FOUND") return;
-      console.error("[ExplanationChatContainer] Failed to load quizzes:", error);
-    });
-  }, [artQuiz.state.activeArtifactId, artQuiz.state.currentQuiz, artQuiz.loadQuizzesFromAPI]);
-
-  // --- Quiz answer handler ---
-  const handleQuizAnswer = useCallback(
-    async (answer: string) => {
-      const quizId = (artQuiz.state.currentQuiz as { id?: string })?.id;
-      const artifactId = artQuiz.state.activeArtifactId;
-
-      if (quizId && artifactId) {
-        await artQuiz.answerQuizAPI(artifactId, quizId, answer, messages.length);
-      }
-    },
-    [artQuiz.state.currentQuiz, artQuiz.state.activeArtifactId, artQuiz.answerQuizAPI, messages.length]
-  );
-
   // ブックマーク切り替え
   const handleBookmarkToggle = useCallback(
     (lineNumber: number) => {
@@ -337,22 +174,6 @@ export function ExplanationChatContainer({
     },
     [toggleBookmark]
   );
-
-  // チャットメッセージを処理（アーティファクトを非表示）
-  const getProcessedContent = useCallback((content: string, isStreaming: boolean = false) => {
-    let processed = content;
-
-    if (isStreaming) {
-      processed = removeIncompleteStreamingTags(processed);
-    }
-
-    processed = removeQuizMarkerFromContent(processed);
-
-    const { contentWithoutArtifacts } = parseArtifacts(processed);
-    processed = contentWithoutArtifacts;
-
-    return processed;
-  }, []);
 
   // Should show right panel
   const hasRightPanel = hasCode || hasArtifacts;

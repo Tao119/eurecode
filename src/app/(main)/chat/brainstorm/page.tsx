@@ -13,12 +13,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useGoal } from "@/hooks/useGoal";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
-import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
-
-// 拡張されたConversationMetadata型（generationStateを含む）
-interface ExtendedConversationMetadata {
-  generationState?: PersistedArtifactQuizState;
-}
+import type { ExtendedConversationMetadata } from "@/hooks/useArtifactQuiz";
 
 export default function BrainstormModePage() {
   const searchParams = useSearchParams();

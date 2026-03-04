@@ -439,7 +439,7 @@ export function GenerationChatContainer({
   // クイズに回答（新APIベース）
   const handleQuizAnswer = useCallback(
     async (answer: string) => {
-      const quizId = (state.currentQuiz as { id?: string })?.id;
+      const quizId = state.currentQuiz?.id;
       const artifactId = state.activeArtifactId;
 
       if (quizId && artifactId) {

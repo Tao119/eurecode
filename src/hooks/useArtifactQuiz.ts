@@ -23,6 +23,7 @@ export type UnlockLevel = number;
 export type QuizOption = UnlockQuizOption;
 
 export interface UnlockQuiz {
+  id?: string;
   level: number;
   totalQuestions?: number;
   question: string;
@@ -79,6 +80,11 @@ export type ArtifactQuizStatus =
   | "has-code"       // Has artifacts but no active quiz
   | "quizzing"       // Currently answering a quiz
   | "unlocked";      // Active artifact fully unlocked
+
+// Shared metadata type for extracting generationState from conversation metadata
+export interface ExtendedConversationMetadata {
+  generationState?: PersistedArtifactQuizState;
+}
 
 export interface ArtifactQuizOptions {
   conversationId?: string;

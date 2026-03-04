@@ -6,12 +6,7 @@ import { useChat } from "@/hooks/useChat";
 import { useCredits } from "@/hooks/useCredits";
 import { toast } from "sonner";
 import type { ConversationMetadata, BrainstormSubMode } from "@/types/chat";
-import type { PersistedArtifactQuizState } from "@/hooks/useArtifactQuiz";
-
-// 拡張されたConversationMetadata型（generationStateを含む）
-interface ExtendedConversationMetadata {
-  generationState?: PersistedArtifactQuizState;
-}
+import type { ExtendedConversationMetadata } from "@/hooks/useArtifactQuiz";
 
 interface PageProps {
   params: Promise<{ id: string }>;
