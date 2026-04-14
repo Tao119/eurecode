@@ -1,48 +1,52 @@
 /**
  * Conversation history retention configuration
  *
- * Currently all users have the same retention period (30 days).
- * In the future, this can be extended to support per-plan retention:
- * - Free: 3 days
- * - Starter: 7 days
- * - Pro: Unlimited
- * - Max: Unlimited
+ * Conversations are NEVER deleted from the database.
+ * Retention controls only what is VISIBLE to users based on their plan.
+ *
+ * Per-plan visibility:
+ * - free:    7 days
+ * - starter: 30 days
+ * - pro:     Unlimited
+ * - max:     Unlimited
  */
 
 export const RETENTION_CONFIG = {
-  // Default retention period in days for all users
-  defaultDays: 30,
+  defaultDays: 7,
 
-  // Future: Per-plan retention (in days)
-  // byPlan: {
-  //   free: 3,
-  //   starter: 7,
-  //   pro: -1, // -1 means unlimited
-  //   max: -1,
-  // },
+  byPlan: {
+    free: 7,
+    starter: 30,
+    pro: -1,   // -1 = unlimited
+    max: -1,   // -1 = unlimited
+    // Organization plans
+    business: -1,
+    enterprise: -1,
+  },
 } as const;
 
+type PlanKey = keyof typeof RETENTION_CONFIG.byPlan;
+
 /**
- * Get retention days for a user based on their plan
- * Currently returns the default value for all users
+ * Get retention days for a user based on their plan.
+ * Returns -1 for unlimited retention.
  */
-export function getRetentionDays(_plan?: string): number {
-  // Future: Return plan-specific retention
-  // if (plan && RETENTION_CONFIG.byPlan[plan]) {
-  //   return RETENTION_CONFIG.byPlan[plan];
-  // }
+export function getRetentionDays(plan?: string | null): number {
+  if (plan && plan in RETENTION_CONFIG.byPlan) {
+    return RETENTION_CONFIG.byPlan[plan as PlanKey];
+  }
   return RETENTION_CONFIG.defaultDays;
 }
 
 /**
- * Get the cutoff date for conversation retention
- * Conversations older than this date should not be shown/should be deleted
+ * Get the cutoff date for conversation visibility.
+ * Conversations older than this date are hidden (not deleted) from the user.
+ * Returns new Date(0) for unlimited retention plans.
  */
-export function getRetentionCutoffDate(plan?: string): Date {
+export function getRetentionCutoffDate(plan?: string | null): Date {
   const days = getRetentionDays(plan);
   if (days < 0) {
-    // Unlimited retention - return a very old date
-    return new Date(0);
+    return new Date(0); // Unlimited - show all conversations
   }
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);

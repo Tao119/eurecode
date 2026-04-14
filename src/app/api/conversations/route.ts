@@ -80,8 +80,22 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // Calculate retention cutoff date (future: pass user's plan)
-    const retentionCutoff = getRetentionCutoffDate();
+    // Fetch user's plan for retention-based visibility
+    const userWithPlan = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        subscription: {
+          select: { individualPlan: true, organizationPlan: true },
+        },
+      },
+    });
+    const plan =
+      userWithPlan?.subscription?.individualPlan ??
+      userWithPlan?.subscription?.organizationPlan ??
+      null;
+
+    // Calculate retention cutoff date based on plan (DB is NOT modified - display only)
+    const retentionCutoff = getRetentionCutoffDate(plan);
 
     const where = {
       userId: session.user.id,
