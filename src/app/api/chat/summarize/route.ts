@@ -55,7 +55,7 @@ const messageSchema = z.object({
 
 const summarizeRequestSchema = z.object({
   conversationId: z.string().optional(),
-  messages: z.array(messageSchema).min(1).max(100),
+  messages: z.array(messageSchema).min(1).max(500),
   brainstormState: z.object({
     subMode: z.enum(["casual", "planning"]),
     ideaSummary: z.string().nullable().optional(),

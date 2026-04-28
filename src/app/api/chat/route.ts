@@ -163,7 +163,7 @@ const chatRequestSchema = z.object({
       content: z.string().max(100000), // 100KB max per message
       attachments: z.array(fileAttachmentSchema).max(5).optional(), // Max 5 attachments
     })
-  ).max(100), // Max 100 messages in context
+  ).max(500), // compactConversationIfNeeded handles actual token limits
   conversationId: z.string().max(100).optional(),
   // 壁打ちモードのサブモード（casual/planning）
   brainstormSubMode: z.enum(["casual", "planning"]).optional(),
