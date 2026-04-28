@@ -112,22 +112,29 @@ function messagesToAnthropicFormat(messages: Array<{ role: "user" | "assistant";
       if (msg.role === "user" && msg.attachments && msg.attachments.length > 0) {
         const contentBlocks: ContentBlockParam[] = [];
 
-        // Add file attachments first
+        // Add attachment content blocks (only those with data)
         const attachmentBlocks = attachmentsToContentBlocks(msg.attachments);
         contentBlocks.push(...attachmentBlocks);
 
-        // Add text content if present
-        if (msg.content.trim()) {
-          contentBlocks.push({
-            type: "text",
-            text: msg.content,
-          });
+        // For stripped attachments (data removed from history), add a text description
+        // so Claude retains context that files were attached in previous turns.
+        const stripped = msg.attachments.filter((a) => !a.data);
+        if (stripped.length > 0) {
+          const names = stripped.map((a) => a.name).join(", ");
+          contentBlocks.push({ type: "text", text: `[添付ファイル（前のターン）: ${names}]` });
         }
 
-        return {
-          role: msg.role,
-          content: contentBlocks,
-        };
+        // Add text content if present
+        if (msg.content.trim()) {
+          contentBlocks.push({ type: "text", text: msg.content });
+        }
+
+        // Claude API requires at least one content block
+        if (contentBlocks.length === 0) {
+          return { role: msg.role, content: msg.content || "(添付ファイルのみ)" };
+        }
+
+        return { role: msg.role, content: contentBlocks };
       }
 
       // Simple text message

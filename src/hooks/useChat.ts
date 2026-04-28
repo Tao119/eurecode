@@ -30,6 +30,27 @@ export class ChatApiError extends Error {
 
 const EMPTY_MESSAGES: Message[] = [];
 
+const MAX_MESSAGES_FOR_API = 500;
+
+// Strip attachment binary data from old messages and trim to API limit.
+// Only the last user message keeps its attachment data; older messages get metadata only.
+// This prevents huge payloads and validation errors from accumulated images in history.
+function prepareMessagesForApi(messages: Message[]): Message[] {
+  const trimmed =
+    messages.length > MAX_MESSAGES_FOR_API
+      ? messages.slice(-MAX_MESSAGES_FOR_API)
+      : messages;
+
+  return trimmed.map((msg, idx) => {
+    const isLast = idx === trimmed.length - 1;
+    if (isLast || !msg.attachments?.length) return msg;
+    return {
+      ...msg,
+      attachments: msg.attachments.map(({ data: _d, previewUrl: _p, ...rest }) => rest),
+    };
+  });
+}
+
 interface PointsConsumedInfo {
   pointsUsed: number;
   remainingPoints: number;
@@ -585,7 +606,7 @@ export function useChat({ mode, conversationId: initialConversationId, projectId
           },
           body: JSON.stringify({
             mode,
-            messages: [...currentMessages, userMessage],
+            messages: prepareMessagesForApi([...currentMessages, userMessage]),
             brainstormSubMode: mode === "brainstorm" ? brainstormSubMode : undefined,
             activeArtifact: mode === "generation" ? activeArtifact : undefined,
             model,
