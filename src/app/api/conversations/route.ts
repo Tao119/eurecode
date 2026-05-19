@@ -87,11 +87,19 @@ export async function GET(request: NextRequest) {
         subscription: {
           select: { individualPlan: true, organizationPlan: true },
         },
+        organization: {
+          select: {
+            subscription: {
+              select: { organizationPlan: true },
+            },
+          },
+        },
       },
     });
     const plan =
       userWithPlan?.subscription?.individualPlan ??
       userWithPlan?.subscription?.organizationPlan ??
+      userWithPlan?.organization?.subscription?.organizationPlan ??
       null;
 
     // Calculate retention cutoff date based on plan (DB is NOT modified - display only)
