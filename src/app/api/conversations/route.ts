@@ -84,8 +84,9 @@ export async function GET(request: NextRequest) {
     const userWithPlan = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
+        organizationId: true,
         subscription: {
-          select: { individualPlan: true, organizationPlan: true },
+          select: { individualPlan: true },
         },
         organization: {
           select: {
@@ -96,11 +97,10 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-    const plan =
-      userWithPlan?.subscription?.individualPlan ??
-      userWithPlan?.subscription?.organizationPlan ??
-      userWithPlan?.organization?.subscription?.organizationPlan ??
-      null;
+    // Org members use only the organization plan; individual users use their own plan
+    const plan = userWithPlan?.organizationId
+      ? (userWithPlan?.organization?.subscription?.organizationPlan ?? null)
+      : (userWithPlan?.subscription?.individualPlan ?? null);
 
     // Calculate retention cutoff date based on plan (DB is NOT modified - display only)
     const retentionCutoff = getRetentionCutoffDate(plan);
